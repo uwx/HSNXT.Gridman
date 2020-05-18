@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
-using System.Reflection;
-using System.IO;
 using Veldrid;
 using System.Runtime.CompilerServices;
 
@@ -12,7 +10,7 @@ namespace ImGuiNET
     /// A modified version of Veldrid.ImGui's ImGuiRenderer.
     /// Manages input for ImGui and handles rendering ImGui's DrawLists with Veldrid.
     /// </summary>
-    public class ImGuiController : IDisposable
+    internal class ImguiRenderer : IDisposable
     {
         private GraphicsDevice _gd;
         private bool _frameBegun;
@@ -31,7 +29,7 @@ namespace ImGuiNET
         private ResourceSet _mainResourceSet;
         private ResourceSet _fontTextureResourceSet;
 
-        private IntPtr _fontAtlasID = (IntPtr)1;
+        private readonly IntPtr _fontAtlasId = (IntPtr)1;
         private bool _controlDown;
         private bool _shiftDown;
         private bool _altDown;
@@ -39,7 +37,7 @@ namespace ImGuiNET
 
         private int _windowWidth;
         private int _windowHeight;
-        private Vector2 _scaleFactor = Vector2.One;
+        private readonly Vector2 _scaleFactor = Vector2.One;
 
         // Image trackers
         private readonly Dictionary<TextureView, ResourceSetInfo> _setsByView
@@ -48,12 +46,12 @@ namespace ImGuiNET
             = new Dictionary<Texture, TextureView>();
         private readonly Dictionary<IntPtr, ResourceSetInfo> _viewsById = new Dictionary<IntPtr, ResourceSetInfo>();
         private readonly List<IDisposable> _ownedResources = new List<IDisposable>();
-        private int _lastAssignedID = 100;
+        private int _lastAssignedId = 100;
 
         /// <summary>
-        /// Constructs a new ImGuiController.
+        /// Constructs a new <see cref="ImguiRenderer"/>.
         /// </summary>
-        public ImGuiController(GraphicsDevice gd, OutputDescription outputDescription, int width, int height, IntPtr? imguiContext = null)
+        public ImguiRenderer(GraphicsDevice gd, OutputDescription outputDescription, int width, int height, IntPtr? imguiContext = null)
         {
             _gd = gd;
             _windowWidth = width;
@@ -104,8 +102,7 @@ namespace ImGuiNET
             _vertexShader = factory.CreateShader(new ShaderDescription(ShaderStages.Vertex, vertexShaderBytes, "VS"));
             _fragmentShader = factory.CreateShader(new ShaderDescription(ShaderStages.Fragment, fragmentShaderBytes, "FS"));
 
-            VertexLayoutDescription[] vertexLayouts = new VertexLayoutDescription[]
-            {
+            VertexLayoutDescription[] vertexLayouts = {
                 new VertexLayoutDescription(
                     new VertexElementDescription("in_position", VertexElementSemantic.Position, VertexElementFormat.Float2),
                     new VertexElementDescription("in_texCoord", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float2),
@@ -118,13 +115,13 @@ namespace ImGuiNET
             _textureLayout = factory.CreateResourceLayout(new ResourceLayoutDescription(
                 new ResourceLayoutElementDescription("MainTexture", ResourceKind.TextureReadOnly, ShaderStages.Fragment)));
 
-            GraphicsPipelineDescription pd = new GraphicsPipelineDescription(
+            var pd = new GraphicsPipelineDescription(
                 BlendStateDescription.SingleAlphaBlend,
                 new DepthStencilStateDescription(false, false, ComparisonKind.Always),
                 new RasterizerStateDescription(FaceCullMode.None, PolygonFillMode.Solid, FrontFace.Clockwise, false, true),
                 PrimitiveTopology.TriangleList,
                 new ShaderSetDescription(vertexLayouts, new[] { _vertexShader, _fragmentShader }),
-                new ResourceLayout[] { _layout, _textureLayout },
+                new[] { _layout, _textureLayout },
                 outputDescription);
             _pipeline = factory.CreateGraphicsPipeline(ref pd);
 
@@ -141,10 +138,10 @@ namespace ImGuiNET
         /// </summary>
         public IntPtr GetOrCreateImGuiBinding(ResourceFactory factory, TextureView textureView)
         {
-            if (!_setsByView.TryGetValue(textureView, out ResourceSetInfo rsi))
+            if (!_setsByView.TryGetValue(textureView, out var rsi))
             {
                 ResourceSet resourceSet = factory.CreateResourceSet(new ResourceSetDescription(_textureLayout, textureView));
-                rsi = new ResourceSetInfo(GetNextImGuiBindingID(), resourceSet);
+                rsi = new ResourceSetInfo(GetNextImGuiBindingId(), resourceSet);
 
                 _setsByView.Add(textureView, rsi);
                 _viewsById.Add(rsi.ImGuiBinding, rsi);
@@ -154,10 +151,10 @@ namespace ImGuiNET
             return rsi.ImGuiBinding;
         }
 
-        private IntPtr GetNextImGuiBindingID()
+        private IntPtr GetNextImGuiBindingId()
         {
-            int newID = _lastAssignedID++;
-            return (IntPtr)newID;
+            var newId = _lastAssignedId++;
+            return (IntPtr)newId;
         }
 
         /// <summary>
@@ -166,7 +163,7 @@ namespace ImGuiNET
         /// </summary>
         public IntPtr GetOrCreateImGuiBinding(ResourceFactory factory, Texture texture)
         {
-            if (!_autoViewsByTexture.TryGetValue(texture, out TextureView textureView))
+            if (!_autoViewsByTexture.TryGetValue(texture, out var textureView))
             {
                 textureView = factory.CreateTextureView(texture);
                 _autoViewsByTexture.Add(texture, textureView);
@@ -181,7 +178,7 @@ namespace ImGuiNET
         /// </summary>
         public ResourceSet GetImageResourceSet(IntPtr imGuiBinding)
         {
-            if (!_viewsById.TryGetValue(imGuiBinding, out ResourceSetInfo tvi))
+            if (!_viewsById.TryGetValue(imGuiBinding, out var tvi))
             {
                 throw new InvalidOperationException("No registered ImGui binding with id " + imGuiBinding.ToString());
             }
@@ -191,7 +188,7 @@ namespace ImGuiNET
 
         public void ClearCachedImageResources()
         {
-            foreach (IDisposable resource in _ownedResources)
+            foreach (var resource in _ownedResources)
             {
                 resource.Dispose();
             }
@@ -200,47 +197,32 @@ namespace ImGuiNET
             _setsByView.Clear();
             _viewsById.Clear();
             _autoViewsByTexture.Clear();
-            _lastAssignedID = 100;
+            _lastAssignedId = 100;
         }
 
-        private byte[] LoadEmbeddedShaderCode(ResourceFactory factory, string name, ShaderStages stage)
+        private static byte[] LoadEmbeddedShaderCode(ResourceFactory factory, string name, ShaderStages stage)
         {
-            switch (factory.BackendType)
+            return factory.BackendType switch
             {
-                case GraphicsBackend.Direct3D11:
-                {
-                    string resourceName = name + ".hlsl.bytes";
-                    return GetEmbeddedResourceBytes(resourceName);
-                }
-                case GraphicsBackend.OpenGL:
-                {
-                    string resourceName = name + ".glsl";
-                    return GetEmbeddedResourceBytes(resourceName);
-                }
-                case GraphicsBackend.Vulkan:
-                {
-                    string resourceName = name + ".spv";
-                    return GetEmbeddedResourceBytes(resourceName);
-                }
-                case GraphicsBackend.Metal:
-                {
-                    string resourceName = name + ".metallib";
-                    return GetEmbeddedResourceBytes(resourceName);
-                }
-                default:
-                    throw new NotImplementedException();
-            }
+                GraphicsBackend.Direct3D11 => GetEmbeddedResourceBytes($"{name}.hlsl.bytes"),
+                GraphicsBackend.OpenGL => GetEmbeddedResourceBytes($"{name}.glsl"),
+                GraphicsBackend.Vulkan => GetEmbeddedResourceBytes($"{name}.spv"),
+                GraphicsBackend.Metal => GetEmbeddedResourceBytes($"{name}.metallib"),
+                _ => throw new NotImplementedException()
+            };
         }
 
-        private byte[] GetEmbeddedResourceBytes(string resourceName)
+        private static byte[] GetEmbeddedResourceBytes(string resourceName)
         {
-            Assembly assembly = typeof(ImGuiController).Assembly;
-            using (Stream s = assembly.GetManifestResourceStream(resourceName))
+            var assembly = typeof(ImguiRenderer).Assembly;
+            using var stream = assembly.GetManifestResourceStream(resourceName);
+            if (stream == null)
             {
-                byte[] ret = new byte[s.Length];
-                s.Read(ret, 0, (int)s.Length);
-                return ret;
+                throw new InvalidOperationException($"Missing resource required for shader compilation: {typeof(ImguiRenderer).Assembly}:{resourceName}");
             }
+            var ret = new byte[stream.Length];
+            stream.Read(ret, 0, (int) stream.Length);
+            return ret;
         }
 
         /// <summary>
@@ -248,14 +230,12 @@ namespace ImGuiNET
         /// </summary>
         public void RecreateFontDeviceTexture(GraphicsDevice gd)
         {
-            ImGuiIOPtr io = ImGui.GetIO();
+            var io = ImGui.GetIO();
             // Build
-            IntPtr pixels;
-            int width, height, bytesPerPixel;
-            io.Fonts.GetTexDataAsRGBA32(out pixels, out width, out height, out bytesPerPixel);
-            Console.WriteLine(pixels + "," + width + "," + height + "," + bytesPerPixel);
+            io.Fonts.GetTexDataAsRGBA32(out IntPtr pixels, out var width, out var height, out var bytesPerPixel);
+            Console.WriteLine($"Got ImGui font texture data: {pixels} px {width}x{height} {bytesPerPixel*8}bpp");
             // Store our identifier
-            io.Fonts.SetTexID(_fontAtlasID);
+            io.Fonts.SetTexID(_fontAtlasId);
 
             _fontTexture = gd.ResourceFactory.CreateTexture(TextureDescription.Texture2D(
                 (uint)width,
@@ -321,7 +301,7 @@ namespace ImGuiNET
         /// </summary>
         private void SetPerFrameImGuiData(float deltaSeconds)
         {
-            ImGuiIOPtr io = ImGui.GetIO();
+            var io = ImGui.GetIO();
             io.DisplaySize = new Vector2(
                 _windowWidth / _scaleFactor.X,
                 _windowHeight / _scaleFactor.Y);
@@ -331,15 +311,15 @@ namespace ImGuiNET
 
         private void UpdateImGuiInput(InputSnapshot snapshot)
         {
-            ImGuiIOPtr io = ImGui.GetIO();
+            var io = ImGui.GetIO();
 
-            Vector2 mousePosition = snapshot.MousePosition;
+            var mousePosition = snapshot.MousePosition;
 
             // Determine if any of the mouse buttons were pressed during this snapshot period, even if they are no longer held.
-            bool leftPressed = false;
-            bool middlePressed = false;
-            bool rightPressed = false;
-            foreach (MouseEvent me in snapshot.MouseEvents)
+            var leftPressed = false;
+            var middlePressed = false;
+            var rightPressed = false;
+            foreach (var me in snapshot.MouseEvents)
             {
                 if (me.Down)
                 {
@@ -364,17 +344,17 @@ namespace ImGuiNET
             io.MousePos = mousePosition;
             io.MouseWheel = snapshot.WheelDelta;
 
-            IReadOnlyList<char> keyCharPresses = snapshot.KeyCharPresses;
-            for (int i = 0; i < keyCharPresses.Count; i++)
+            var keyCharPresses = snapshot.KeyCharPresses;
+            for (var i = 0; i < keyCharPresses.Count; i++)
             {
-                char c = keyCharPresses[i];
+                var c = keyCharPresses[i];
                 io.AddInputCharacter(c);
             }
 
-            IReadOnlyList<KeyEvent> keyEvents = snapshot.KeyEvents;
-            for (int i = 0; i < keyEvents.Count; i++)
+            var keyEvents = snapshot.KeyEvents;
+            for (var i = 0; i < keyEvents.Count; i++)
             {
-                KeyEvent keyEvent = keyEvents[i];
+                var keyEvent = keyEvents[i];
                 io.KeysDown[(int)keyEvent.Key] = keyEvent.Down;
                 if (keyEvent.Key == Key.ControlLeft)
                 {
@@ -402,7 +382,7 @@ namespace ImGuiNET
 
         private static void SetKeyMappings()
         {
-            ImGuiIOPtr io = ImGui.GetIO();
+            var io = ImGui.GetIO();
             io.KeyMap[(int)ImGuiKey.Tab] = (int)Key.Tab;
             io.KeyMap[(int)ImGuiKey.LeftArrow] = (int)Key.Left;
             io.KeyMap[(int)ImGuiKey.RightArrow] = (int)Key.Right;
@@ -424,53 +404,53 @@ namespace ImGuiNET
             io.KeyMap[(int)ImGuiKey.Z] = (int)Key.Z;
         }
 
-        private void RenderImDrawData(ImDrawDataPtr draw_data, GraphicsDevice gd, CommandList cl)
+        private void RenderImDrawData(ImDrawDataPtr drawData, GraphicsDevice gd, CommandList cl)
         {
             uint vertexOffsetInVertices = 0;
             uint indexOffsetInElements = 0;
 
-            if (draw_data.CmdListsCount == 0)
+            if (drawData.CmdListsCount == 0)
             {
                 return;
             }
 
-            uint totalVBSize = (uint)(draw_data.TotalVtxCount * Unsafe.SizeOf<ImDrawVert>());
-            if (totalVBSize > _vertexBuffer.SizeInBytes)
+            var totalVbSize = (uint)(drawData.TotalVtxCount * Unsafe.SizeOf<ImDrawVert>());
+            if (totalVbSize > _vertexBuffer.SizeInBytes)
             {
                 gd.DisposeWhenIdle(_vertexBuffer);
-                _vertexBuffer = gd.ResourceFactory.CreateBuffer(new BufferDescription((uint)(totalVBSize * 1.5f), BufferUsage.VertexBuffer | BufferUsage.Dynamic));
+                _vertexBuffer = gd.ResourceFactory.CreateBuffer(new BufferDescription((uint)(totalVbSize * 1.5f), BufferUsage.VertexBuffer | BufferUsage.Dynamic));
             }
 
-            uint totalIBSize = (uint)(draw_data.TotalIdxCount * sizeof(ushort));
-            if (totalIBSize > _indexBuffer.SizeInBytes)
+            var totalIbSize = (uint)(drawData.TotalIdxCount * sizeof(ushort));
+            if (totalIbSize > _indexBuffer.SizeInBytes)
             {
                 gd.DisposeWhenIdle(_indexBuffer);
-                _indexBuffer = gd.ResourceFactory.CreateBuffer(new BufferDescription((uint)(totalIBSize * 1.5f), BufferUsage.IndexBuffer | BufferUsage.Dynamic));
+                _indexBuffer = gd.ResourceFactory.CreateBuffer(new BufferDescription((uint)(totalIbSize * 1.5f), BufferUsage.IndexBuffer | BufferUsage.Dynamic));
             }
 
-            for (int i = 0; i < draw_data.CmdListsCount; i++)
+            for (var i = 0; i < drawData.CmdListsCount; i++)
             {
-                ImDrawListPtr cmd_list = draw_data.CmdListsRange[i];
+                var cmdList = drawData.CmdListsRange[i];
 
                 cl.UpdateBuffer(
                     _vertexBuffer,
                     vertexOffsetInVertices * (uint)Unsafe.SizeOf<ImDrawVert>(),
-                    cmd_list.VtxBuffer.Data,
-                    (uint)(cmd_list.VtxBuffer.Size * Unsafe.SizeOf<ImDrawVert>()));
+                    cmdList.VtxBuffer.Data,
+                    (uint)(cmdList.VtxBuffer.Size * Unsafe.SizeOf<ImDrawVert>()));
 
                 cl.UpdateBuffer(
                     _indexBuffer,
                     indexOffsetInElements * sizeof(ushort),
-                    cmd_list.IdxBuffer.Data,
-                    (uint)(cmd_list.IdxBuffer.Size * sizeof(ushort)));
+                    cmdList.IdxBuffer.Data,
+                    (uint)(cmdList.IdxBuffer.Size * sizeof(ushort)));
 
-                vertexOffsetInVertices += (uint)cmd_list.VtxBuffer.Size;
-                indexOffsetInElements += (uint)cmd_list.IdxBuffer.Size;
+                vertexOffsetInVertices += (uint)cmdList.VtxBuffer.Size;
+                indexOffsetInElements += (uint)cmdList.IdxBuffer.Size;
             }
 
             // Setup orthographic projection matrix into our constant buffer
-            ImGuiIOPtr io = ImGui.GetIO();
-            Matrix4x4 mvp = Matrix4x4.CreateOrthographicOffCenter(
+            var io = ImGui.GetIO();
+            var mvp = Matrix4x4.CreateOrthographicOffCenter(
                 0f,
                 io.DisplaySize.X,
                 io.DisplaySize.Y,
@@ -485,17 +465,17 @@ namespace ImGuiNET
             cl.SetPipeline(_pipeline);
             cl.SetGraphicsResourceSet(0, _mainResourceSet);
 
-            draw_data.ScaleClipRects(io.DisplayFramebufferScale);
+            drawData.ScaleClipRects(io.DisplayFramebufferScale);
 
             // Render command lists
-            int vtx_offset = 0;
-            int idx_offset = 0;
-            for (int n = 0; n < draw_data.CmdListsCount; n++)
+            var vtxOffset = 0;
+            var idxOffset = 0;
+            for (var n = 0; n < drawData.CmdListsCount; n++)
             {
-                ImDrawListPtr cmd_list = draw_data.CmdListsRange[n];
-                for (int cmd_i = 0; cmd_i < cmd_list.CmdBuffer.Size; cmd_i++)
+                var cmdList = drawData.CmdListsRange[n];
+                for (var cmd_i = 0; cmd_i < cmdList.CmdBuffer.Size; cmd_i++)
                 {
-                    ImDrawCmdPtr pcmd = cmd_list.CmdBuffer[cmd_i];
+                    var pcmd = cmdList.CmdBuffer[cmd_i];
                     if (pcmd.UserCallback != IntPtr.Zero)
                     {
                         throw new NotImplementedException();
@@ -504,7 +484,7 @@ namespace ImGuiNET
                     {
                         if (pcmd.TextureId != IntPtr.Zero)
                         {
-                            if (pcmd.TextureId == _fontAtlasID)
+                            if (pcmd.TextureId == _fontAtlasId)
                             {
                                 cl.SetGraphicsResourceSet(1, _fontTextureResourceSet);
                             }
@@ -521,12 +501,12 @@ namespace ImGuiNET
                             (uint)(pcmd.ClipRect.Z - pcmd.ClipRect.X),
                             (uint)(pcmd.ClipRect.W - pcmd.ClipRect.Y));
 
-                        cl.DrawIndexed(pcmd.ElemCount, 1, (uint)idx_offset, vtx_offset, 0);
+                        cl.DrawIndexed(pcmd.ElemCount, 1, (uint)idxOffset, vtxOffset, 0);
                     }
 
-                    idx_offset += (int)pcmd.ElemCount;
+                    idxOffset += (int)pcmd.ElemCount;
                 }
-                vtx_offset += cmd_list.VtxBuffer.Size;
+                vtxOffset += cmdList.VtxBuffer.Size;
             }
         }
 
@@ -547,7 +527,7 @@ namespace ImGuiNET
             _pipeline.Dispose();
             _mainResourceSet.Dispose();
 
-            foreach (IDisposable resource in _ownedResources)
+            foreach (var resource in _ownedResources)
             {
                 resource.Dispose();
             }

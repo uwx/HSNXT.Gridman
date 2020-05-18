@@ -9,26 +9,56 @@
     <ItemGroup>
         <PackageReference Include="JetBrains.Annotations" Version="2019.1.3" />
         <PackageReference Include="ImGui.NET" Version="1.72.0" />
+        <PackageReference Include="System.Drawing.Common" Version="5.0.0-preview.3.20214.6" />
         <PackageReference Include="Veldrid" Version="4.7.0" />
         <PackageReference Include="Veldrid.StartupUtilities" Version="4.7.0" />
     </ItemGroup>
 
     <ItemGroup>
-        <EmbeddedResource Include="Shaders/GLSL/imgui-vertex.glsl" LogicalName="imgui-vertex.glsl" />
-        <EmbeddedResource Include="Shaders/GLSL/imgui-frag.glsl" LogicalName="imgui-frag.glsl" />
-        <EmbeddedResource Include="Shaders/HLSL/imgui-vertex.hlsl.bytes" LogicalName="imgui-vertex.hlsl.bytes" />
-        <EmbeddedResource Include="Shaders/HLSL/imgui-frag.hlsl.bytes" LogicalName="imgui-frag.hlsl.bytes" />
-        <EmbeddedResource Include="Shaders/SPIR-V/imgui-vertex.spv" LogicalName="imgui-vertex.spv" />
-        <EmbeddedResource Include="Shaders/SPIR-V/imgui-frag.spv" LogicalName="imgui-frag.spv" />
-        <EmbeddedResource Include="Shaders/Metal/imgui-vertex.metallib" LogicalName="imgui-vertex.metallib" />
-        <EmbeddedResource Include="Shaders/Metal/imgui-frag.metallib" LogicalName="imgui-frag.metallib" />
+        <EmbeddedResource Include="Fonts/Roboto-Black.otf" />
+        <EmbeddedResource Include="Fonts/Roboto-BlackItalic.otf" />
+        <EmbeddedResource Include="Fonts/Roboto-Bold.otf" />
+        <EmbeddedResource Include="Fonts/Roboto-BoldItalic.otf" />
+        <EmbeddedResource Include="Fonts/Roboto-Italic.otf" />
+        <EmbeddedResource Include="Fonts/Roboto-Light.otf" />
+        <EmbeddedResource Include="Fonts/Roboto-LightItalic.otf" />
+        <EmbeddedResource Include="Fonts/Roboto-Medium.otf" />
+        <EmbeddedResource Include="Fonts/Roboto-MediumItalic.otf" />
+        <EmbeddedResource Include="Fonts/Roboto-Regular.otf" />
+        <EmbeddedResource Include="Fonts/Roboto-Thin.otf" />
+        <EmbeddedResource Include="Fonts/Roboto-ThinItalic.otf" />
+        <EmbeddedResource Include="Fonts/RobotoMono-Bold.otf" />
+        <EmbeddedResource Include="Fonts/RobotoMono-Light.otf" />
+        <EmbeddedResource Include="Fonts/RobotoMono-Medium.otf" />
+        <EmbeddedResource Include="Fonts/RobotoMono-Regular.otf" />
+        <EmbeddedResource Include="Fonts/RobotoMono-Thin.otf" />
+        
+        <EmbeddedResource Include="Shaders/GLSL/imgui-vertex.glsl">
+            <LogicalName>imgui-vertex.glsl</LogicalName>
+        </EmbeddedResource>
+        <EmbeddedResource Include="Shaders/GLSL/imgui-frag.glsl">
+            <LogicalName>imgui-frag.glsl</LogicalName>
+        </EmbeddedResource>
+        <EmbeddedResource Include="Shaders/HLSL/imgui-vertex.hlsl.bytes">
+            <LogicalName>imgui-vertex.hlsl.bytes</LogicalName>
+        </EmbeddedResource>
+        <EmbeddedResource Include="Shaders/HLSL/imgui-frag.hlsl.bytes">
+            <LogicalName>imgui-frag.hlsl.bytes</LogicalName>
+        </EmbeddedResource>
+        <EmbeddedResource Include="Shaders/SPIR-V/imgui-vertex.spv">
+            <LogicalName>imgui-vertex.spv</LogicalName>
+        </EmbeddedResource>
+        <EmbeddedResource Include="Shaders/SPIR-V/imgui-frag.spv">
+            <LogicalName>imgui-frag.spv</LogicalName>
+        </EmbeddedResource>
+        <EmbeddedResource Include="Shaders/Metal/imgui-vertex.metallib">
+            <LogicalName>imgui-vertex.metallib</LogicalName>
+        </EmbeddedResource>
+        <EmbeddedResource Include="Shaders/Metal/imgui-frag.metallib">
+            <LogicalName>imgui-frag.metallib</LogicalName>
+        </EmbeddedResource>
 
-        <None Remove="*.otf" />
-        <EmbeddedResource Include="*.otf" />
-        <None Remove="Arimo Italic Nerd Font Complete Windows Compatible.ttf" />
-        <EmbeddedResource Include="Arimo Italic Nerd Font Complete Windows Compatible.ttf" />
         <None Remove="LICENSES.txt" />
-        <EmbeddedResource Include="LICENSES.txt" />
     </ItemGroup>
 
 </Project>

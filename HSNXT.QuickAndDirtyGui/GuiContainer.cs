@@ -1,38 +1,24 @@
 using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using ImGuiNET;
 using JetBrains.Annotations;
 using Veldrid;
 using Veldrid.Sdl2;
+using SD = System.Drawing;
+using SDI = System.Drawing.Imaging;
 
 namespace HSNXT.QuickAndDirtyGui
 {
     [PublicAPI]
-    public sealed class GuiContainer
+    public sealed partial class GuiContainer
     {
-        // ReSharper disable InconsistentNaming
+        // ReSharper disable once InconsistentNaming
         public ImGuiIOPtr IO { get; internal set; }
-        public ImFontAtlasPtr IOFonts => IO.Fonts; // TODO static shared context atlas
         public ImGuiStylePtr Style => ImGui.GetStyle();
-
-        public ImFontPtr Roboto_ThinItalic { get; internal set; }
-        public ImFontPtr Roboto_Black { get; internal set; }
-        public ImFontPtr Roboto_BlackItalic { get; internal set; }
-        public ImFontPtr Roboto_Bold { get; internal set; }
-        public ImFontPtr Roboto_BoldItalic { get; internal set; }
-        public ImFontPtr Roboto_Italic { get; internal set; }
-        public ImFontPtr Roboto_Light { get; internal set; }
-        public ImFontPtr Roboto_LightItalic { get; internal set; }
-        public ImFontPtr Roboto_Medium { get; internal set; }
-        public ImFontPtr Roboto_MediumItalic { get; internal set; }
-        public ImFontPtr RobotoMono_Bold { get; internal set; }
-        public ImFontPtr RobotoMono_Light { get; internal set; }
-        public ImFontPtr RobotoMono_Medium { get; internal set; }
-        public ImFontPtr RobotoMono_Regular { get; internal set; }
-        public ImFontPtr Roboto_Regular { get; internal set; }
-        public ImFontPtr Roboto_Thin { get; internal set; }
-        // ReSharper restore InconsistentNaming
         
         public int X { get => _window.X; set => _window.X = value; }
         public int Y { get => _window.Y; set => _window.Y = value; }
@@ -46,641 +32,61 @@ namespace HSNXT.QuickAndDirtyGui
         public bool BorderVisible { get => _window.BorderVisible; set => _window.BorderVisible = value; }
         public bool Resizable { get => _window.Resizable; set => _window.Resizable = value; }
 
+        private readonly GuiWindow _guiWindow;
         private readonly Sdl2Window _window;
+        private readonly ImguiWindow _imguiWindow;
 
-        public GuiContainer(Sdl2Window window)
+        internal GuiContainer(GuiWindow guiWindow, Sdl2Window window, ImguiWindow imguiWindow)
         {
+            _guiWindow = guiWindow;
             _window = window;
+            _imguiWindow = imguiWindow;
         }
 
+        #if DEBUG
         public void Debug()
         {
             ImGui.Text("Bap " + NerdFonts.CustomCpp);
             ImGui.ShowStyleEditor();
             ImGui.Text("Testa");
         }
-        
-        public bool Button(string label, bool disabled)
-        {
-            if (!disabled) return ImGui.Button(label);
+        #endif
 
-            ImGui.PushStyleVar(ImGuiStyleVar.Alpha, Style.Alpha * 0.5F);
-            ImGui.Button(label);
-            ImGui.PopStyleVar();
-            return false;
+        public IntPtr CreateTexture<T>(uint width, uint height, Veldrid.PixelFormat format, T[] source) where T : unmanaged
+        {
+            return _imguiWindow.CreateTexture(width, height, format, source);
         }
 
-        public bool ButtonDisabled(string label) => Button(label, true);
-        
-        public bool Button(string label, Vector2 size, bool disabled)
+        public IntPtr CreateTexture(string imagePath)
         {
-            if (!disabled) return ImGui.Button(label);
+            using var image = SD.Image.FromFile(imagePath);
+            if (!(image is Bitmap bitmap))
+            {
+                throw new ArgumentException("Image does not point to a bitmap", nameof(imagePath));
+            }
 
-            ImGui.PushStyleVar(ImGuiStyleVar.Alpha, Style.Alpha * 0.5F);
-            ImGui.Button(label, size);
-            ImGui.PopStyleVar();
-            return false;
+            var data = bitmap.LockBits(new SD.Rectangle(SD.Point.Empty, bitmap.Size), ImageLockMode.ReadOnly, SDI.PixelFormat.Format32bppArgb);
+            
+            unsafe
+            {
+                var width = data.Width;
+                var height = data.Height;
+                var stride = data.Stride;
+
+                if (stride != width)
+                {
+                    throw new ArgumentException($"Unsupported image byte algignment, width {width} != stride {stride}", nameof(imagePath));
+                }
+
+                using var resultArray = NativeArray.From(data.Scan0.ToPointer(), height * stride);
+                // TODO i'm not good at endianness. RGBA or BGRA, or neither?
+                return _imguiWindow.CreateTexture((uint) bitmap.Width, (uint) bitmap.Height, Veldrid.PixelFormat.R8_G8_B8_A8_UNorm, resultArray);
+            }
         }
-        
-        public bool ButtonDisabled(string label, Vector2 size) => Button(label, size, true);
 
-        public bool Combo(string label, ref int currentItem, params string[] items) => ImGui.Combo(label, ref currentItem, items, items.Length);
-        public bool Combo(string label, ref int currentItem, int popupMaxHeightInItems, params string[] items) => ImGui.Combo(label, ref currentItem, items, items.Length, popupMaxHeightInItems);
-
-        public bool InputText(string label, byte[] buf, uint bufSize) => ImGui.InputText(label, buf, bufSize);
-        public bool InputText(string label, byte[] buf, uint bufSize, ImGuiInputTextFlags flags) => ImGui.InputText(label, buf, bufSize, flags);
-        public bool InputText(string label, byte[] buf, uint bufSize, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback) => ImGui.InputText(label, buf, bufSize, flags, callback);
-        public bool InputText(string label, byte[] buf, uint bufSize, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, IntPtr userData) => ImGui.InputText(label, buf, bufSize, flags, callback, userData);
-        public bool InputText(string label, ref string input, uint maxLength) => ImGui.InputText(label, ref input, maxLength);
-        public bool InputText(string label, ref string input, uint maxLength, ImGuiInputTextFlags flags) => ImGui.InputText(label, ref input, maxLength, flags);
-        public bool InputText(string label, ref string input, uint maxLength, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback) => ImGui.InputText(label, ref input, maxLength, flags, callback);
-        public bool InputText(string label, ref string input, uint maxLength, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, IntPtr userData) => ImGui.InputText(label, ref input, maxLength, flags, callback, userData);
-        public bool InputTextMultiline(string label, ref string input, uint maxLength, Vector2 size) => ImGui.InputTextMultiline(label, ref input, maxLength, size);
-        public bool InputTextMultiline(string label, ref string input, uint maxLength, Vector2 size, ImGuiInputTextFlags flags) => ImGui.InputTextMultiline(label, ref input, maxLength, size, flags);
-        public bool InputTextMultiline(string label, ref string input, uint maxLength, Vector2 size, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback) => ImGui.InputTextMultiline(label, ref input, maxLength, size, flags, callback);
-        public bool InputTextMultiline(string label, ref string input, uint maxLength, Vector2 size, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, IntPtr userData) => ImGui.InputTextMultiline(label, ref input, maxLength, size, flags, callback, userData);
-        public bool InputText(string label, IntPtr buf, uint bufSize) => ImGui.InputText(label, buf, bufSize);
-        public bool InputText(string label, IntPtr buf, uint bufSize, ImGuiInputTextFlags flags) => ImGui.InputText(label, buf, bufSize, flags);
-        public bool InputText(string label, IntPtr buf, uint bufSize, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback) => ImGui.InputText(label, buf, bufSize, flags, callback);
-        public bool InputText(string label, IntPtr buf, uint bufSize, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, IntPtr userData) => ImGui.InputText(label, buf, bufSize, flags, callback, userData);
-        public bool Begin(string name, ImGuiWindowFlags flags) => ImGui.Begin(name, flags);
-        public bool MenuItem(string label, bool enabled) => ImGui.MenuItem(label, enabled);
-
-        public ImGuiPayloadPtr AcceptDragDropPayload(string type) => ImGui.AcceptDragDropPayload(type);
-        public ImGuiPayloadPtr AcceptDragDropPayload(string type, ImGuiDragDropFlags flags) => ImGui.AcceptDragDropPayload(type, flags);
-        public void AlignTextToFramePadding() => ImGui.AlignTextToFramePadding();
-        public bool ArrowButton(string strId, ImGuiDir dir) => ImGui.ArrowButton(strId, dir);
-        public bool Begin(string name) => ImGui.Begin(name);
-        public bool Begin(string name, ref bool pOpen) => ImGui.Begin(name, ref pOpen);
-        public bool Begin(string name, ref bool pOpen, ImGuiWindowFlags flags) => ImGui.Begin(name, ref pOpen, flags);
-        public bool BeginChild(string strId) => ImGui.BeginChild(strId);
-        public bool BeginChild(string strId, Vector2 size) => ImGui.BeginChild(strId, size);
-        public bool BeginChild(string strId, Vector2 size, bool border) => ImGui.BeginChild(strId, size, border);
-        public bool BeginChild(string strId, Vector2 size, bool border, ImGuiWindowFlags flags) => ImGui.BeginChild(strId, size, border, flags);
-        public bool BeginChild(uint id) => ImGui.BeginChild(id);
-        public bool BeginChild(uint id, Vector2 size) => ImGui.BeginChild(id, size);
-        public bool BeginChild(uint id, Vector2 size, bool border) => ImGui.BeginChild(id, size, border);
-        public bool BeginChild(uint id, Vector2 size, bool border, ImGuiWindowFlags flags) => ImGui.BeginChild(id, size, border, flags);
-        public bool BeginChildFrame(uint id, Vector2 size) => ImGui.BeginChildFrame(id, size);
-        public bool BeginChildFrame(uint id, Vector2 size, ImGuiWindowFlags flags) => ImGui.BeginChildFrame(id, size, flags);
-        public bool BeginCombo(string label, string previewValue) => ImGui.BeginCombo(label, previewValue);
-        public bool BeginCombo(string label, string previewValue, ImGuiComboFlags flags) => ImGui.BeginCombo(label, previewValue, flags);
-        public bool BeginDragDropSource() => ImGui.BeginDragDropSource();
-        public bool BeginDragDropSource(ImGuiDragDropFlags flags) => ImGui.BeginDragDropSource(flags);
-        public bool BeginDragDropTarget() => ImGui.BeginDragDropTarget();
-        public void BeginGroup() => ImGui.BeginGroup();
-        public bool BeginMainMenuBar() => ImGui.BeginMainMenuBar();
-        public bool BeginMenu(string label) => ImGui.BeginMenu(label);
-        public bool BeginMenu(string label, bool enabled) => ImGui.BeginMenu(label, enabled);
-        public bool BeginMenuBar() => ImGui.BeginMenuBar();
-        public bool BeginPopup(string strId) => ImGui.BeginPopup(strId);
-        public bool BeginPopup(string strId, ImGuiWindowFlags flags) => ImGui.BeginPopup(strId, flags);
-        public bool BeginPopupContextItem() => ImGui.BeginPopupContextItem();
-        public bool BeginPopupContextItem(string strId) => ImGui.BeginPopupContextItem(strId);
-        public bool BeginPopupContextItem(string strId, int mouseButton) => ImGui.BeginPopupContextItem(strId, mouseButton);
-        public bool BeginPopupContextVoid() => ImGui.BeginPopupContextVoid();
-        public bool BeginPopupContextVoid(string strId) => ImGui.BeginPopupContextVoid(strId);
-        public bool BeginPopupContextVoid(string strId, int mouseButton) => ImGui.BeginPopupContextVoid(strId, mouseButton);
-        public bool BeginPopupContextWindow() => ImGui.BeginPopupContextWindow();
-        public bool BeginPopupContextWindow(string strId) => ImGui.BeginPopupContextWindow(strId);
-        public bool BeginPopupContextWindow(string strId, int mouseButton) => ImGui.BeginPopupContextWindow(strId, mouseButton);
-        public bool BeginPopupContextWindow(string strId, int mouseButton, bool alsoOverItems) => ImGui.BeginPopupContextWindow(strId, mouseButton, alsoOverItems);
-        public bool BeginPopupModal(string name) => ImGui.BeginPopupModal(name);
-        public bool BeginPopupModal(string name, ref bool pOpen) => ImGui.BeginPopupModal(name, ref pOpen);
-        public bool BeginPopupModal(string name, ref bool pOpen, ImGuiWindowFlags flags) => ImGui.BeginPopupModal(name, ref pOpen, flags);
-        public bool BeginTabBar(string strId) => ImGui.BeginTabBar(strId);
-        public bool BeginTabBar(string strId, ImGuiTabBarFlags flags) => ImGui.BeginTabBar(strId, flags);
-        public bool BeginTabItem(string label) => ImGui.BeginTabItem(label);
-        public bool BeginTabItem(string label, ref bool pOpen) => ImGui.BeginTabItem(label, ref pOpen);
-        public bool BeginTabItem(string label, ref bool pOpen, ImGuiTabItemFlags flags) => ImGui.BeginTabItem(label, ref pOpen, flags);
-        public void BeginTooltip() => ImGui.BeginTooltip();
-        public void Bullet() => ImGui.Bullet();
-        public void BulletText(string fmt) => ImGui.BulletText(fmt);
-        public bool Button(string label) => ImGui.Button(label);
-        public bool Button(string label, Vector2 size) => ImGui.Button(label, size);
-        public float CalcItemWidth() => ImGui.CalcItemWidth();
-        public Vector2 CalcTextSize(string text) => ImGui.CalcTextSize(text);
-        public void CaptureKeyboardFromApp() => ImGui.CaptureKeyboardFromApp();
-        public void CaptureKeyboardFromApp(bool wantCaptureKeyboardValue) => ImGui.CaptureKeyboardFromApp(wantCaptureKeyboardValue);
-        public void CaptureMouseFromApp() => ImGui.CaptureMouseFromApp();
-        public void CaptureMouseFromApp(bool wantCaptureMouseValue) => ImGui.CaptureMouseFromApp(wantCaptureMouseValue);
-        public bool Checkbox(string label, ref bool v) => ImGui.Checkbox(label, ref v);
-        public bool CheckboxFlags(string label, ref uint flags, uint flagsValue) => ImGui.CheckboxFlags(label, ref flags, flagsValue);
-        public void CloseCurrentPopup() => ImGui.CloseCurrentPopup();
-        public bool CollapsingHeader(string label) => ImGui.CollapsingHeader(label);
-        public bool CollapsingHeader(string label, ImGuiTreeNodeFlags flags) => ImGui.CollapsingHeader(label, flags);
-        public bool CollapsingHeader(string label, ref bool pOpen) => ImGui.CollapsingHeader(label, ref pOpen);
-        public bool CollapsingHeader(string label, ref bool pOpen, ImGuiTreeNodeFlags flags) => ImGui.CollapsingHeader(label, ref pOpen, flags);
-        public bool ColorButton(string descId, Vector4 col) => ImGui.ColorButton(descId, col);
-        public bool ColorButton(string descId, Vector4 col, ImGuiColorEditFlags flags) => ImGui.ColorButton(descId, col, flags);
-        public bool ColorButton(string descId, Vector4 col, ImGuiColorEditFlags flags, Vector2 size) => ImGui.ColorButton(descId, col, flags, size);
-        public uint ColorConvertFloat4ToU32(Vector4 @in) => ImGui.ColorConvertFloat4ToU32(@in);
-        public void ColorConvertHSVtoRGB(float h, float s, float v, out float outR, out float outG, out float outB) => ImGui.ColorConvertHSVtoRGB(h, s, v, out outR, out outG, out outB);
-        public void ColorConvertRGBtoHsv(float r, float g, float b, out float outH, out float outS, out float outV) => ImGui.ColorConvertRGBtoHSV(r, g, b, out outH, out outS, out outV);
-        public Vector4 ColorConvertU32ToFloat4(uint @in) => ImGui.ColorConvertU32ToFloat4(@in);
-        public bool ColorEdit3(string label, ref Vector3 col) => ImGui.ColorEdit3(label, ref col);
-        public bool ColorEdit3(string label, ref Vector3 col, ImGuiColorEditFlags flags) => ImGui.ColorEdit3(label, ref col, flags);
-        public bool ColorEdit4(string label, ref Vector4 col) => ImGui.ColorEdit4(label, ref col);
-        public bool ColorEdit4(string label, ref Vector4 col, ImGuiColorEditFlags flags) => ImGui.ColorEdit4(label, ref col, flags);
-        public bool ColorPicker3(string label, ref Vector3 col) => ImGui.ColorPicker3(label, ref col);
-        public bool ColorPicker3(string label, ref Vector3 col, ImGuiColorEditFlags flags) => ImGui.ColorPicker3(label, ref col, flags);
-        public bool ColorPicker4(string label, ref Vector4 col) => ImGui.ColorPicker4(label, ref col);
-        public bool ColorPicker4(string label, ref Vector4 col, ImGuiColorEditFlags flags) => ImGui.ColorPicker4(label, ref col, flags);
-        public bool ColorPicker4(string label, ref Vector4 col, ImGuiColorEditFlags flags, ref float refCol) => ImGui.ColorPicker4(label, ref col, flags, ref refCol);
-        public void Columns() => ImGui.Columns();
-        public void Columns(int count) => ImGui.Columns(count);
-        public void Columns(int count, string id) => ImGui.Columns(count, id);
-        public void Columns(int count, string id, bool border) => ImGui.Columns(count, id, border);
-        public bool Combo(string label, ref int currentItem, string[] items, int itemsCount) => ImGui.Combo(label, ref currentItem, items, itemsCount);
-        public bool Combo(string label, ref int currentItem, string[] items, int itemsCount, int popupMaxHeightInItems) => ImGui.Combo(label, ref currentItem, items, itemsCount, popupMaxHeightInItems);
-        public bool Combo(string label, ref int currentItem, string itemsSeparatedByZeros) => ImGui.Combo(label, ref currentItem, itemsSeparatedByZeros);
-        public bool Combo(string label, ref int currentItem, string itemsSeparatedByZeros, int popupMaxHeightInItems) => ImGui.Combo(label, ref currentItem, itemsSeparatedByZeros, popupMaxHeightInItems);
-        public IntPtr CreateContext() => ImGui.CreateContext();
-        public IntPtr CreateContext(ImFontAtlasPtr sharedFontAtlas) => ImGui.CreateContext(sharedFontAtlas);
-        public bool DebugCheckVersionAndDataLayout(string versionStr, uint szIo, uint szStyle, uint szVec2, uint szVec4, uint szDrawvert, uint szDrawidx) => ImGui.DebugCheckVersionAndDataLayout(versionStr, szIo, szStyle, szVec2, szVec4, szDrawvert, szDrawidx);
-        public void DestroyContext() => ImGui.DestroyContext();
-        public void DestroyContext(IntPtr ctx) => ImGui.DestroyContext(ctx);
-        public bool DragFloat(string label, ref float v) => ImGui.DragFloat(label, ref v);
-        public bool DragFloat(string label, ref float v, float vSpeed) => ImGui.DragFloat(label, ref v, vSpeed);
-        public bool DragFloat(string label, ref float v, float vSpeed, float vMin) => ImGui.DragFloat(label, ref v, vSpeed, vMin);
-        public bool DragFloat(string label, ref float v, float vSpeed, float vMin, float vMax) => ImGui.DragFloat(label, ref v, vSpeed, vMin, vMax);
-        public bool DragFloat(string label, ref float v, float vSpeed, float vMin, float vMax, string format) => ImGui.DragFloat(label, ref v, vSpeed, vMin, vMax, format);
-        public bool DragFloat(string label, ref float v, float vSpeed, float vMin, float vMax, string format, float power) => ImGui.DragFloat(label, ref v, vSpeed, vMin, vMax, format, power);
-        public bool DragFloat2(string label, ref Vector2 v) => ImGui.DragFloat2(label, ref v);
-        public bool DragFloat2(string label, ref Vector2 v, float vSpeed) => ImGui.DragFloat2(label, ref v, vSpeed);
-        public bool DragFloat2(string label, ref Vector2 v, float vSpeed, float vMin) => ImGui.DragFloat2(label, ref v, vSpeed, vMin);
-        public bool DragFloat2(string label, ref Vector2 v, float vSpeed, float vMin, float vMax) => ImGui.DragFloat2(label, ref v, vSpeed, vMin, vMax);
-        public bool DragFloat2(string label, ref Vector2 v, float vSpeed, float vMin, float vMax, string format) => ImGui.DragFloat2(label, ref v, vSpeed, vMin, vMax, format);
-        public bool DragFloat2(string label, ref Vector2 v, float vSpeed, float vMin, float vMax, string format, float power) => ImGui.DragFloat2(label, ref v, vSpeed, vMin, vMax, format, power);
-        public bool DragFloat3(string label, ref Vector3 v) => ImGui.DragFloat3(label, ref v);
-        public bool DragFloat3(string label, ref Vector3 v, float vSpeed) => ImGui.DragFloat3(label, ref v, vSpeed);
-        public bool DragFloat3(string label, ref Vector3 v, float vSpeed, float vMin) => ImGui.DragFloat3(label, ref v, vSpeed, vMin);
-        public bool DragFloat3(string label, ref Vector3 v, float vSpeed, float vMin, float vMax) => ImGui.DragFloat3(label, ref v, vSpeed, vMin, vMax);
-        public bool DragFloat3(string label, ref Vector3 v, float vSpeed, float vMin, float vMax, string format) => ImGui.DragFloat3(label, ref v, vSpeed, vMin, vMax, format);
-        public bool DragFloat3(string label, ref Vector3 v, float vSpeed, float vMin, float vMax, string format, float power) => ImGui.DragFloat3(label, ref v, vSpeed, vMin, vMax, format, power);
-        public bool DragFloat4(string label, ref Vector4 v) => ImGui.DragFloat4(label, ref v);
-        public bool DragFloat4(string label, ref Vector4 v, float vSpeed) => ImGui.DragFloat4(label, ref v, vSpeed);
-        public bool DragFloat4(string label, ref Vector4 v, float vSpeed, float vMin) => ImGui.DragFloat4(label, ref v, vSpeed, vMin);
-        public bool DragFloat4(string label, ref Vector4 v, float vSpeed, float vMin, float vMax) => ImGui.DragFloat4(label, ref v, vSpeed, vMin, vMax);
-        public bool DragFloat4(string label, ref Vector4 v, float vSpeed, float vMin, float vMax, string format) => ImGui.DragFloat4(label, ref v, vSpeed, vMin, vMax, format);
-        public bool DragFloat4(string label, ref Vector4 v, float vSpeed, float vMin, float vMax, string format, float power) => ImGui.DragFloat4(label, ref v, vSpeed, vMin, vMax, format, power);
-        public bool DragFloatRange2(string label, ref float vCurrentMin, ref float vCurrentMax) => ImGui.DragFloatRange2(label, ref vCurrentMin, ref vCurrentMax);
-        public bool DragFloatRange2(string label, ref float vCurrentMin, ref float vCurrentMax, float vSpeed) => ImGui.DragFloatRange2(label, ref vCurrentMin, ref vCurrentMax, vSpeed);
-        public bool DragFloatRange2(string label, ref float vCurrentMin, ref float vCurrentMax, float vSpeed, float vMin) => ImGui.DragFloatRange2(label, ref vCurrentMin, ref vCurrentMax, vSpeed, vMin);
-        public bool DragFloatRange2(string label, ref float vCurrentMin, ref float vCurrentMax, float vSpeed, float vMin, float vMax) => ImGui.DragFloatRange2(label, ref vCurrentMin, ref vCurrentMax, vSpeed, vMin, vMax);
-        public bool DragFloatRange2(string label, ref float vCurrentMin, ref float vCurrentMax, float vSpeed, float vMin, float vMax, string format) => ImGui.DragFloatRange2(label, ref vCurrentMin, ref vCurrentMax, vSpeed, vMin, vMax, format);
-        public bool DragFloatRange2(string label, ref float vCurrentMin, ref float vCurrentMax, float vSpeed, float vMin, float vMax, string format, string formatMax) => ImGui.DragFloatRange2(label, ref vCurrentMin, ref vCurrentMax, vSpeed, vMin, vMax, format, formatMax);
-        public bool DragFloatRange2(string label, ref float vCurrentMin, ref float vCurrentMax, float vSpeed, float vMin, float vMax, string format, string formatMax, float power) => ImGui.DragFloatRange2(label, ref vCurrentMin, ref vCurrentMax, vSpeed, vMin, vMax, format, formatMax, power);
-        public bool DragInt(string label, ref int v) => ImGui.DragInt(label, ref v);
-        public bool DragInt(string label, ref int v, float vSpeed) => ImGui.DragInt(label, ref v, vSpeed);
-        public bool DragInt(string label, ref int v, float vSpeed, int vMin) => ImGui.DragInt(label, ref v, vSpeed, vMin);
-        public bool DragInt(string label, ref int v, float vSpeed, int vMin, int vMax) => ImGui.DragInt(label, ref v, vSpeed, vMin, vMax);
-        public bool DragInt(string label, ref int v, float vSpeed, int vMin, int vMax, string format) => ImGui.DragInt(label, ref v, vSpeed, vMin, vMax, format);
-        public bool DragInt2(string label, ref int v) => ImGui.DragInt2(label, ref v);
-        public bool DragInt2(string label, ref int v, float vSpeed) => ImGui.DragInt2(label, ref v, vSpeed);
-        public bool DragInt2(string label, ref int v, float vSpeed, int vMin) => ImGui.DragInt2(label, ref v, vSpeed, vMin);
-        public bool DragInt2(string label, ref int v, float vSpeed, int vMin, int vMax) => ImGui.DragInt2(label, ref v, vSpeed, vMin, vMax);
-        public bool DragInt2(string label, ref int v, float vSpeed, int vMin, int vMax, string format) => ImGui.DragInt2(label, ref v, vSpeed, vMin, vMax, format);
-        public bool DragInt3(string label, ref int v) => ImGui.DragInt3(label, ref v);
-        public bool DragInt3(string label, ref int v, float vSpeed) => ImGui.DragInt3(label, ref v, vSpeed);
-        public bool DragInt3(string label, ref int v, float vSpeed, int vMin) => ImGui.DragInt3(label, ref v, vSpeed, vMin);
-        public bool DragInt3(string label, ref int v, float vSpeed, int vMin, int vMax) => ImGui.DragInt3(label, ref v, vSpeed, vMin, vMax);
-        public bool DragInt3(string label, ref int v, float vSpeed, int vMin, int vMax, string format) => ImGui.DragInt3(label, ref v, vSpeed, vMin, vMax, format);
-        public bool DragInt4(string label, ref int v) => ImGui.DragInt4(label, ref v);
-        public bool DragInt4(string label, ref int v, float vSpeed) => ImGui.DragInt4(label, ref v, vSpeed);
-        public bool DragInt4(string label, ref int v, float vSpeed, int vMin) => ImGui.DragInt4(label, ref v, vSpeed, vMin);
-        public bool DragInt4(string label, ref int v, float vSpeed, int vMin, int vMax) => ImGui.DragInt4(label, ref v, vSpeed, vMin, vMax);
-        public bool DragInt4(string label, ref int v, float vSpeed, int vMin, int vMax, string format) => ImGui.DragInt4(label, ref v, vSpeed, vMin, vMax, format);
-        public bool DragIntRange2(string label, ref int vCurrentMin, ref int vCurrentMax) => ImGui.DragIntRange2(label, ref vCurrentMin, ref vCurrentMax);
-        public bool DragIntRange2(string label, ref int vCurrentMin, ref int vCurrentMax, float vSpeed) => ImGui.DragIntRange2(label, ref vCurrentMin, ref vCurrentMax, vSpeed);
-        public bool DragIntRange2(string label, ref int vCurrentMin, ref int vCurrentMax, float vSpeed, int vMin) => ImGui.DragIntRange2(label, ref vCurrentMin, ref vCurrentMax, vSpeed, vMin);
-        public bool DragIntRange2(string label, ref int vCurrentMin, ref int vCurrentMax, float vSpeed, int vMin, int vMax) => ImGui.DragIntRange2(label, ref vCurrentMin, ref vCurrentMax, vSpeed, vMin, vMax);
-        public bool DragIntRange2(string label, ref int vCurrentMin, ref int vCurrentMax, float vSpeed, int vMin, int vMax, string format) => ImGui.DragIntRange2(label, ref vCurrentMin, ref vCurrentMax, vSpeed, vMin, vMax, format);
-        public bool DragIntRange2(string label, ref int vCurrentMin, ref int vCurrentMax, float vSpeed, int vMin, int vMax, string format, string formatMax) => ImGui.DragIntRange2(label, ref vCurrentMin, ref vCurrentMax, vSpeed, vMin, vMax, format, formatMax);
-        public bool DragScalar(string label, ImGuiDataType dataType, IntPtr v, float vSpeed) => ImGui.DragScalar(label, dataType, v, vSpeed);
-        public bool DragScalar(string label, ImGuiDataType dataType, IntPtr v, float vSpeed, IntPtr vMin) => ImGui.DragScalar(label, dataType, v, vSpeed, vMin);
-        public bool DragScalar(string label, ImGuiDataType dataType, IntPtr v, float vSpeed, IntPtr vMin, IntPtr vMax) => ImGui.DragScalar(label, dataType, v, vSpeed, vMin, vMax);
-        public bool DragScalar(string label, ImGuiDataType dataType, IntPtr v, float vSpeed, IntPtr vMin, IntPtr vMax, string format) => ImGui.DragScalar(label, dataType, v, vSpeed, vMin, vMax, format);
-        public bool DragScalar(string label, ImGuiDataType dataType, IntPtr v, float vSpeed, IntPtr vMin, IntPtr vMax, string format, float power) => ImGui.DragScalar(label, dataType, v, vSpeed, vMin, vMax, format, power);
-        public bool DragScalarN(string label, ImGuiDataType dataType, IntPtr v, int components, float vSpeed) => ImGui.DragScalarN(label, dataType, v, components, vSpeed);
-        public bool DragScalarN(string label, ImGuiDataType dataType, IntPtr v, int components, float vSpeed, IntPtr vMin) => ImGui.DragScalarN(label, dataType, v, components, vSpeed, vMin);
-        public bool DragScalarN(string label, ImGuiDataType dataType, IntPtr v, int components, float vSpeed, IntPtr vMin, IntPtr vMax) => ImGui.DragScalarN(label, dataType, v, components, vSpeed, vMin, vMax);
-        public bool DragScalarN(string label, ImGuiDataType dataType, IntPtr v, int components, float vSpeed, IntPtr vMin, IntPtr vMax, string format) => ImGui.DragScalarN(label, dataType, v, components, vSpeed, vMin, vMax, format);
-        public bool DragScalarN(string label, ImGuiDataType dataType, IntPtr v, int components, float vSpeed, IntPtr vMin, IntPtr vMax, string format, float power) => ImGui.DragScalarN(label, dataType, v, components, vSpeed, vMin, vMax, format, power);
-        public void Dummy(Vector2 size) => ImGui.Dummy(size);
-        public void End() => ImGui.End();
-        public void EndChild() => ImGui.EndChild();
-        public void EndChildFrame() => ImGui.EndChildFrame();
-        public void EndCombo() => ImGui.EndCombo();
-        public void EndDragDropSource() => ImGui.EndDragDropSource();
-        public void EndDragDropTarget() => ImGui.EndDragDropTarget();
-        public void EndFrame() => ImGui.EndFrame();
-        public void EndGroup() => ImGui.EndGroup();
-        public void EndMainMenuBar() => ImGui.EndMainMenuBar();
-        public void EndMenu() => ImGui.EndMenu();
-        public void EndMenuBar() => ImGui.EndMenuBar();
-        public void EndPopup() => ImGui.EndPopup();
-        public void EndTabBar() => ImGui.EndTabBar();
-        public void EndTabItem() => ImGui.EndTabItem();
-        public void EndTooltip() => ImGui.EndTooltip();
-        public ImDrawListPtr GetBackgroundDrawList() => ImGui.GetBackgroundDrawList();
-        public string GetClipboardText() => ImGui.GetClipboardText();
-        public uint GetColorU32(ImGuiCol idx) => ImGui.GetColorU32(idx);
-        public uint GetColorU32(ImGuiCol idx, float alphaMul) => ImGui.GetColorU32(idx, alphaMul);
-        public uint GetColorU32(Vector4 col) => ImGui.GetColorU32(col);
-        public uint GetColorU32(uint col) => ImGui.GetColorU32(col);
-        public int GetColumnIndex() => ImGui.GetColumnIndex();
-        public float GetColumnOffset() => ImGui.GetColumnOffset();
-        public float GetColumnOffset(int columnIndex) => ImGui.GetColumnOffset(columnIndex);
-        public int GetColumnsCount() => ImGui.GetColumnsCount();
-        public float GetColumnWidth() => ImGui.GetColumnWidth();
-        public float GetColumnWidth(int columnIndex) => ImGui.GetColumnWidth(columnIndex);
-        public Vector2 GetContentRegionAvail() => ImGui.GetContentRegionAvail();
-        public Vector2 GetContentRegionMax() => ImGui.GetContentRegionMax();
-        public IntPtr GetCurrentContext() => ImGui.GetCurrentContext();
-        public Vector2 GetCursorPos() => ImGui.GetCursorPos();
-        public float GetCursorPosX() => ImGui.GetCursorPosX();
-        public float GetCursorPosY() => ImGui.GetCursorPosY();
-        public Vector2 GetCursorScreenPos() => ImGui.GetCursorScreenPos();
-        public Vector2 GetCursorStartPos() => ImGui.GetCursorStartPos();
-        public ImGuiPayloadPtr GetDragDropPayload() => ImGui.GetDragDropPayload();
-        public ImDrawDataPtr GetDrawData() => ImGui.GetDrawData();
-        public IntPtr GetDrawListSharedData() => ImGui.GetDrawListSharedData();
-        public ImFontPtr GetFont() => ImGui.GetFont();
-        public float GetFontSize() => ImGui.GetFontSize();
-        public Vector2 GetFontTexUvWhitePixel() => ImGui.GetFontTexUvWhitePixel();
-        public ImDrawListPtr GetForegroundDrawList() => ImGui.GetForegroundDrawList();
-        public int GetFrameCount() => ImGui.GetFrameCount();
-        public float GetFrameHeight() => ImGui.GetFrameHeight();
-        public float GetFrameHeightWithSpacing() => ImGui.GetFrameHeightWithSpacing();
-        public uint GetId(string strId) => ImGui.GetID(strId);
-        public uint GetId(IntPtr ptrId) => ImGui.GetID(ptrId);
-        public ImGuiIOPtr GetIo() => ImGui.GetIO();
-        public Vector2 GetItemRectMax() => ImGui.GetItemRectMax();
-        public Vector2 GetItemRectMin() => ImGui.GetItemRectMin();
-        public Vector2 GetItemRectSize() => ImGui.GetItemRectSize();
-        public int GetKeyIndex(ImGuiKey imguiKey) => ImGui.GetKeyIndex(imguiKey);
-        public int GetKeyPressedAmount(int keyIndex, float repeatDelay, float rate) => ImGui.GetKeyPressedAmount(keyIndex, repeatDelay, rate);
-        public ImGuiMouseCursor GetMouseCursor() => ImGui.GetMouseCursor();
-        public Vector2 GetMouseDragDelta() => ImGui.GetMouseDragDelta();
-        public Vector2 GetMouseDragDelta(int button) => ImGui.GetMouseDragDelta(button);
-        public Vector2 GetMouseDragDelta(int button, float lockThreshold) => ImGui.GetMouseDragDelta(button, lockThreshold);
-        public Vector2 GetMousePos() => ImGui.GetMousePos();
-        public Vector2 GetMousePosOnOpeningCurrentPopup() => ImGui.GetMousePosOnOpeningCurrentPopup();
-        public float GetScrollMaxX() => ImGui.GetScrollMaxX();
-        public float GetScrollMaxY() => ImGui.GetScrollMaxY();
-        public float GetScrollX() => ImGui.GetScrollX();
-        public float GetScrollY() => ImGui.GetScrollY();
-        public ImGuiStoragePtr GetStateStorage() => ImGui.GetStateStorage();
-        public ImGuiStylePtr GetStyle() => ImGui.GetStyle();
-        public string GetStyleColorName(ImGuiCol idx) => ImGui.GetStyleColorName(idx);
-        public unsafe ref Vector4 GetStyleColorVec4(ImGuiCol idx) => ref Unsafe.AsRef<Vector4>(ImGui.GetStyleColorVec4(idx));
-        public float GetTextLineHeight() => ImGui.GetTextLineHeight();
-        public float GetTextLineHeightWithSpacing() => ImGui.GetTextLineHeightWithSpacing();
-        public double GetTime() => ImGui.GetTime();
-        public float GetTreeNodeToLabelSpacing() => ImGui.GetTreeNodeToLabelSpacing();
-        public string GetVersion() => ImGui.GetVersion();
-        public Vector2 GetWindowContentRegionMax() => ImGui.GetWindowContentRegionMax();
-        public Vector2 GetWindowContentRegionMin() => ImGui.GetWindowContentRegionMin();
-        public float GetWindowContentRegionWidth() => ImGui.GetWindowContentRegionWidth();
-        public ImDrawListPtr GetWindowDrawList() => ImGui.GetWindowDrawList();
-        public float GetWindowHeight() => ImGui.GetWindowHeight();
-        public Vector2 GetWindowPos() => ImGui.GetWindowPos();
-        public Vector2 GetWindowSize() => ImGui.GetWindowSize();
-        public float GetWindowWidth() => ImGui.GetWindowWidth();
-        public void Image(IntPtr userTextureId, Vector2 size) => ImGui.Image(userTextureId, size);
-        public void Image(IntPtr userTextureId, Vector2 size, Vector2 uv0) => ImGui.Image(userTextureId, size, uv0);
-        public void Image(IntPtr userTextureId, Vector2 size, Vector2 uv0, Vector2 uv1) => ImGui.Image(userTextureId, size, uv0, uv1);
-        public void Image(IntPtr userTextureId, Vector2 size, Vector2 uv0, Vector2 uv1, Vector4 tintCol) => ImGui.Image(userTextureId, size, uv0, uv1, tintCol);
-        public void Image(IntPtr userTextureId, Vector2 size, Vector2 uv0, Vector2 uv1, Vector4 tintCol, Vector4 borderCol) => ImGui.Image(userTextureId, size, uv0, uv1, tintCol, borderCol);
-        public bool ImageButton(IntPtr userTextureId, Vector2 size) => ImGui.ImageButton(userTextureId, size);
-        public bool ImageButton(IntPtr userTextureId, Vector2 size, Vector2 uv0) => ImGui.ImageButton(userTextureId, size, uv0);
-        public bool ImageButton(IntPtr userTextureId, Vector2 size, Vector2 uv0, Vector2 uv1) => ImGui.ImageButton(userTextureId, size, uv0, uv1);
-        public bool ImageButton(IntPtr userTextureId, Vector2 size, Vector2 uv0, Vector2 uv1, int framePadding) => ImGui.ImageButton(userTextureId, size, uv0, uv1, framePadding);
-        public bool ImageButton(IntPtr userTextureId, Vector2 size, Vector2 uv0, Vector2 uv1, int framePadding, Vector4 bgCol) => ImGui.ImageButton(userTextureId, size, uv0, uv1, framePadding, bgCol);
-        public bool ImageButton(IntPtr userTextureId, Vector2 size, Vector2 uv0, Vector2 uv1, int framePadding, Vector4 bgCol, Vector4 tintCol) => ImGui.ImageButton(userTextureId, size, uv0, uv1, framePadding, bgCol, tintCol);
-        public void Indent() => ImGui.Indent();
-        public void Indent(float indentW) => ImGui.Indent(indentW);
-        public bool InputDouble(string label, ref double v) => ImGui.InputDouble(label, ref v);
-        public bool InputDouble(string label, ref double v, double step) => ImGui.InputDouble(label, ref v, step);
-        public bool InputDouble(string label, ref double v, double step, double stepFast) => ImGui.InputDouble(label, ref v, step, stepFast);
-        public bool InputDouble(string label, ref double v, double step, double stepFast, string format) => ImGui.InputDouble(label, ref v, step, stepFast, format);
-        public bool InputDouble(string label, ref double v, double step, double stepFast, string format, ImGuiInputTextFlags flags) => ImGui.InputDouble(label, ref v, step, stepFast, format, flags);
-        public bool InputFloat(string label, ref float v) => ImGui.InputFloat(label, ref v);
-        public bool InputFloat(string label, ref float v, float step) => ImGui.InputFloat(label, ref v, step);
-        public bool InputFloat(string label, ref float v, float step, float stepFast) => ImGui.InputFloat(label, ref v, step, stepFast);
-        public bool InputFloat(string label, ref float v, float step, float stepFast, string format) => ImGui.InputFloat(label, ref v, step, stepFast, format);
-        public bool InputFloat(string label, ref float v, float step, float stepFast, string format, ImGuiInputTextFlags flags) => ImGui.InputFloat(label, ref v, step, stepFast, format, flags);
-        public bool InputFloat2(string label, ref Vector2 v) => ImGui.InputFloat2(label, ref v);
-        public bool InputFloat2(string label, ref Vector2 v, string format) => ImGui.InputFloat2(label, ref v, format);
-        public bool InputFloat2(string label, ref Vector2 v, string format, ImGuiInputTextFlags flags) => ImGui.InputFloat2(label, ref v, format, flags);
-        public bool InputFloat3(string label, ref Vector3 v) => ImGui.InputFloat3(label, ref v);
-        public bool InputFloat3(string label, ref Vector3 v, string format) => ImGui.InputFloat3(label, ref v, format);
-        public bool InputFloat3(string label, ref Vector3 v, string format, ImGuiInputTextFlags flags) => ImGui.InputFloat3(label, ref v, format, flags);
-        public bool InputFloat4(string label, ref Vector4 v) => ImGui.InputFloat4(label, ref v);
-        public bool InputFloat4(string label, ref Vector4 v, string format) => ImGui.InputFloat4(label, ref v, format);
-        public bool InputFloat4(string label, ref Vector4 v, string format, ImGuiInputTextFlags flags) => ImGui.InputFloat4(label, ref v, format, flags);
-        public bool InputInt(string label, ref int v) => ImGui.InputInt(label, ref v);
-        public bool InputInt(string label, ref int v, int step) => ImGui.InputInt(label, ref v, step);
-        public bool InputInt(string label, ref int v, int step, int stepFast) => ImGui.InputInt(label, ref v, step, stepFast);
-        public bool InputInt(string label, ref int v, int step, int stepFast, ImGuiInputTextFlags flags) => ImGui.InputInt(label, ref v, step, stepFast, flags);
-        public bool InputInt2(string label, ref int v) => ImGui.InputInt2(label, ref v);
-        public bool InputInt2(string label, ref int v, ImGuiInputTextFlags flags) => ImGui.InputInt2(label, ref v, flags);
-        public bool InputInt3(string label, ref int v) => ImGui.InputInt3(label, ref v);
-        public bool InputInt3(string label, ref int v, ImGuiInputTextFlags flags) => ImGui.InputInt3(label, ref v, flags);
-        public bool InputInt4(string label, ref int v) => ImGui.InputInt4(label, ref v);
-        public bool InputInt4(string label, ref int v, ImGuiInputTextFlags flags) => ImGui.InputInt4(label, ref v, flags);
-        public bool InputScalar(string label, ImGuiDataType dataType, IntPtr v) => ImGui.InputScalar(label, dataType, v);
-        public bool InputScalar(string label, ImGuiDataType dataType, IntPtr v, IntPtr step) => ImGui.InputScalar(label, dataType, v, step);
-        public bool InputScalar(string label, ImGuiDataType dataType, IntPtr v, IntPtr step, IntPtr stepFast) => ImGui.InputScalar(label, dataType, v, step, stepFast);
-        public bool InputScalar(string label, ImGuiDataType dataType, IntPtr v, IntPtr step, IntPtr stepFast, string format) => ImGui.InputScalar(label, dataType, v, step, stepFast, format);
-        public bool InputScalar(string label, ImGuiDataType dataType, IntPtr v, IntPtr step, IntPtr stepFast, string format, ImGuiInputTextFlags flags) => ImGui.InputScalar(label, dataType, v, step, stepFast, format, flags);
-        public bool InputScalarN(string label, ImGuiDataType dataType, IntPtr v, int components) => ImGui.InputScalarN(label, dataType, v, components);
-        public bool InputScalarN(string label, ImGuiDataType dataType, IntPtr v, int components, IntPtr step) => ImGui.InputScalarN(label, dataType, v, components, step);
-        public bool InputScalarN(string label, ImGuiDataType dataType, IntPtr v, int components, IntPtr step, IntPtr stepFast) => ImGui.InputScalarN(label, dataType, v, components, step, stepFast);
-        public bool InputScalarN(string label, ImGuiDataType dataType, IntPtr v, int components, IntPtr step, IntPtr stepFast, string format) => ImGui.InputScalarN(label, dataType, v, components, step, stepFast, format);
-        public bool InputScalarN(string label, ImGuiDataType dataType, IntPtr v, int components, IntPtr step, IntPtr stepFast, string format, ImGuiInputTextFlags flags) => ImGui.InputScalarN(label, dataType, v, components, step, stepFast, format, flags);
-        public bool InputTextWithHint(string label, string hint, string buf, uint bufSize) => ImGui.InputTextWithHint(label, hint, buf, bufSize);
-        public bool InputTextWithHint(string label, string hint, string buf, uint bufSize, ImGuiInputTextFlags flags) => ImGui.InputTextWithHint(label, hint, buf, bufSize, flags);
-        public bool InputTextWithHint(string label, string hint, string buf, uint bufSize, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback) => ImGui.InputTextWithHint(label, hint, buf, bufSize, flags, callback);
-        public bool InputTextWithHint(string label, string hint, string buf, uint bufSize, ImGuiInputTextFlags flags, ImGuiInputTextCallback callback, IntPtr userData) => ImGui.InputTextWithHint(label, hint, buf, bufSize, flags, callback, userData);
-        public bool InvisibleButton(string strId, Vector2 size) => ImGui.InvisibleButton(strId, size);
-        public bool IsAnyItemActive() => ImGui.IsAnyItemActive();
-        public bool IsAnyItemFocused() => ImGui.IsAnyItemFocused();
-        public bool IsAnyItemHovered() => ImGui.IsAnyItemHovered();
-        public bool IsAnyMouseDown() => ImGui.IsAnyMouseDown();
-        public bool IsItemActivated() => ImGui.IsItemActivated();
-        public bool IsItemActive() => ImGui.IsItemActive();
-        public bool IsItemClicked() => ImGui.IsItemClicked();
-        public bool IsItemClicked(int mouseButton) => ImGui.IsItemClicked(mouseButton);
-        public bool IsItemDeactivated() => ImGui.IsItemDeactivated();
-        public bool IsItemDeactivatedAfterEdit() => ImGui.IsItemDeactivatedAfterEdit();
-        public bool IsItemEdited() => ImGui.IsItemEdited();
-        public bool IsItemFocused() => ImGui.IsItemFocused();
-        public bool IsItemHovered() => ImGui.IsItemHovered();
-        public bool IsItemHovered(ImGuiHoveredFlags flags) => ImGui.IsItemHovered(flags);
-        public bool IsItemVisible() => ImGui.IsItemVisible();
-        public bool IsKeyDown(int userKeyIndex) => ImGui.IsKeyDown(userKeyIndex);
-        public bool IsKeyPressed(int userKeyIndex) => ImGui.IsKeyPressed(userKeyIndex);
-        public bool IsKeyPressed(int userKeyIndex, bool repeat) => ImGui.IsKeyPressed(userKeyIndex, repeat);
-        public bool IsKeyReleased(int userKeyIndex) => ImGui.IsKeyReleased(userKeyIndex);
-        public bool IsMouseClicked(int button) => ImGui.IsMouseClicked(button);
-        public bool IsMouseClicked(int button, bool repeat) => ImGui.IsMouseClicked(button, repeat);
-        public bool IsMouseDoubleClicked(int button) => ImGui.IsMouseDoubleClicked(button);
-        public bool IsMouseDown(int button) => ImGui.IsMouseDown(button);
-        public bool IsMouseDragging() => ImGui.IsMouseDragging();
-        public bool IsMouseDragging(int button) => ImGui.IsMouseDragging(button);
-        public bool IsMouseDragging(int button, float lockThreshold) => ImGui.IsMouseDragging(button, lockThreshold);
-        public bool IsMouseHoveringRect(Vector2 rMin, Vector2 rMax) => ImGui.IsMouseHoveringRect(rMin, rMax);
-        public bool IsMouseHoveringRect(Vector2 rMin, Vector2 rMax, bool clip) => ImGui.IsMouseHoveringRect(rMin, rMax, clip);
-        public bool IsMousePosValid() => ImGui.IsMousePosValid();
-        public bool IsMousePosValid(ref Vector2 mousePos) => ImGui.IsMousePosValid(ref mousePos);
-        public bool IsMouseReleased(int button) => ImGui.IsMouseReleased(button);
-        public bool IsPopupOpen(string strId) => ImGui.IsPopupOpen(strId);
-        public bool IsRectVisible(Vector2 size) => ImGui.IsRectVisible(size);
-        public bool IsRectVisible(Vector2 rectMin, Vector2 rectMax) => ImGui.IsRectVisible(rectMin, rectMax);
-        public bool IsWindowAppearing() => ImGui.IsWindowAppearing();
-        public bool IsWindowCollapsed() => ImGui.IsWindowCollapsed();
-        public bool IsWindowFocused() => ImGui.IsWindowFocused();
-        public bool IsWindowFocused(ImGuiFocusedFlags flags) => ImGui.IsWindowFocused(flags);
-        public bool IsWindowHovered() => ImGui.IsWindowHovered();
-        public bool IsWindowHovered(ImGuiHoveredFlags flags) => ImGui.IsWindowHovered(flags);
-        public void LabelText(string label, string fmt) => ImGui.LabelText(label, fmt);
-        public bool ListBox(string label, ref int currentItem, string[] items, int itemsCount) => ImGui.ListBox(label, ref currentItem, items, itemsCount);
-        public bool ListBox(string label, ref int currentItem, string[] items, int itemsCount, int heightInItems) => ImGui.ListBox(label, ref currentItem, items, itemsCount, heightInItems);
-        public void ListBoxFooter() => ImGui.ListBoxFooter();
-        public bool ListBoxHeader(string label) => ImGui.ListBoxHeader(label);
-        public bool ListBoxHeader(string label, Vector2 size) => ImGui.ListBoxHeader(label, size);
-        public bool ListBoxHeader(string label, int itemsCount) => ImGui.ListBoxHeader(label, itemsCount);
-        public bool ListBoxHeader(string label, int itemsCount, int heightInItems) => ImGui.ListBoxHeader(label, itemsCount, heightInItems);
-        public void LoadIniSettingsFromDisk(string iniFilename) => ImGui.LoadIniSettingsFromDisk(iniFilename);
-        public void LoadIniSettingsFromMemory(string iniData) => ImGui.LoadIniSettingsFromMemory(iniData);
-        public void LoadIniSettingsFromMemory(string iniData, uint iniSize) => ImGui.LoadIniSettingsFromMemory(iniData, iniSize);
-        public void LogButtons() => ImGui.LogButtons();
-        public void LogFinish() => ImGui.LogFinish();
-        public void LogText(string fmt) => ImGui.LogText(fmt);
-        public void LogToClipboard() => ImGui.LogToClipboard();
-        public void LogToClipboard(int autoOpenDepth) => ImGui.LogToClipboard(autoOpenDepth);
-        public void LogToFile() => ImGui.LogToFile();
-        public void LogToFile(int autoOpenDepth) => ImGui.LogToFile(autoOpenDepth);
-        public void LogToFile(int autoOpenDepth, string filename) => ImGui.LogToFile(autoOpenDepth, filename);
-        public void LogToTty() => ImGui.LogToTTY();
-        public void LogToTty(int autoOpenDepth) => ImGui.LogToTTY(autoOpenDepth);
-        public IntPtr MemAlloc(uint size) => ImGui.MemAlloc(size);
-        public void MemFree(IntPtr ptr) => ImGui.MemFree(ptr);
-        public bool MenuItem(string label) => ImGui.MenuItem(label);
-        public bool MenuItem(string label, string shortcut) => ImGui.MenuItem(label, shortcut);
-        public bool MenuItem(string label, string shortcut, bool selected) => ImGui.MenuItem(label, shortcut, selected);
-        public bool MenuItem(string label, string shortcut, bool selected, bool enabled) => ImGui.MenuItem(label, shortcut, selected, enabled);
-        public bool MenuItem(string label, string shortcut, ref bool pSelected) => ImGui.MenuItem(label, shortcut, pSelected);
-        public bool MenuItem(string label, string shortcut, ref bool pSelected, bool enabled) => ImGui.MenuItem(label, shortcut, pSelected, enabled);
-        public void NewFrame() => ImGui.NewFrame();
-        public void NewLine() => ImGui.NewLine();
-        public void NextColumn() => ImGui.NextColumn();
-        public void OpenPopup(string strId) => ImGui.OpenPopup(strId);
-        public bool OpenPopupOnItemClick() => ImGui.OpenPopupOnItemClick();
-        public bool OpenPopupOnItemClick(string strId) => ImGui.OpenPopupOnItemClick(strId);
-        public bool OpenPopupOnItemClick(string strId, int mouseButton) => ImGui.OpenPopupOnItemClick(strId, mouseButton);
-        public void PlotHistogram(string label, ref float values, int valuesCount) => ImGui.PlotHistogram(label, ref values, valuesCount);
-        public void PlotHistogram(string label, ref float values, int valuesCount, int valuesOffset) => ImGui.PlotHistogram(label, ref values, valuesCount, valuesOffset);
-        public void PlotHistogram(string label, ref float values, int valuesCount, int valuesOffset, string overlayText) => ImGui.PlotHistogram(label, ref values, valuesCount, valuesOffset, overlayText);
-        public void PlotHistogram(string label, ref float values, int valuesCount, int valuesOffset, string overlayText, float scaleMin) => ImGui.PlotHistogram(label, ref values, valuesCount, valuesOffset, overlayText, scaleMin);
-        public void PlotHistogram(string label, ref float values, int valuesCount, int valuesOffset, string overlayText, float scaleMin, float scaleMax) => ImGui.PlotHistogram(label, ref values, valuesCount, valuesOffset, overlayText, scaleMin, scaleMax);
-        public void PlotHistogram(string label, ref float values, int valuesCount, int valuesOffset, string overlayText, float scaleMin, float scaleMax, Vector2 graphSize) => ImGui.PlotHistogram(label, ref values, valuesCount, valuesOffset, overlayText, scaleMin, scaleMax, graphSize);
-        public void PlotHistogram(string label, ref float values, int valuesCount, int valuesOffset, string overlayText, float scaleMin, float scaleMax, Vector2 graphSize, int stride) => ImGui.PlotHistogram(label, ref values, valuesCount, valuesOffset, overlayText, scaleMin, scaleMax, graphSize, stride);
-        public void PlotLines(string label, ref float values, int valuesCount) => ImGui.PlotLines(label, ref values, valuesCount);
-        public void PlotLines(string label, ref float values, int valuesCount, int valuesOffset) => ImGui.PlotLines(label, ref values, valuesCount, valuesOffset);
-        public void PlotLines(string label, ref float values, int valuesCount, int valuesOffset, string overlayText) => ImGui.PlotLines(label, ref values, valuesCount, valuesOffset, overlayText);
-        public void PlotLines(string label, ref float values, int valuesCount, int valuesOffset, string overlayText, float scaleMin) => ImGui.PlotLines(label, ref values, valuesCount, valuesOffset, overlayText, scaleMin);
-        public void PlotLines(string label, ref float values, int valuesCount, int valuesOffset, string overlayText, float scaleMin, float scaleMax) => ImGui.PlotLines(label, ref values, valuesCount, valuesOffset, overlayText, scaleMin, scaleMax);
-        public void PlotLines(string label, ref float values, int valuesCount, int valuesOffset, string overlayText, float scaleMin, float scaleMax, Vector2 graphSize) => ImGui.PlotLines(label, ref values, valuesCount, valuesOffset, overlayText, scaleMin, scaleMax, graphSize);
-        public void PlotLines(string label, ref float values, int valuesCount, int valuesOffset, string overlayText, float scaleMin, float scaleMax, Vector2 graphSize, int stride) => ImGui.PlotLines(label, ref values, valuesCount, valuesOffset, overlayText, scaleMin, scaleMax, graphSize, stride);
-        public void PopAllowKeyboardFocus() => ImGui.PopAllowKeyboardFocus();
-        public void PopButtonRepeat() => ImGui.PopButtonRepeat();
-        public void PopClipRect() => ImGui.PopClipRect();
-        public void PopFont() => ImGui.PopFont();
-        public void PopId() => ImGui.PopID();
-        public void PopItemWidth() => ImGui.PopItemWidth();
-        public void PopStyleColor() => ImGui.PopStyleColor();
-        public void PopStyleColor(int count) => ImGui.PopStyleColor(count);
-        public void PopStyleVar() => ImGui.PopStyleVar();
-        public void PopStyleVar(int count) => ImGui.PopStyleVar(count);
-        public void PopTextWrapPos() => ImGui.PopTextWrapPos();
-        public void ProgressBar(float fraction) => ImGui.ProgressBar(fraction);
-        public void ProgressBar(float fraction, Vector2 sizeArg) => ImGui.ProgressBar(fraction, sizeArg);
-        public void ProgressBar(float fraction, Vector2 sizeArg, string overlay) => ImGui.ProgressBar(fraction, sizeArg, overlay);
-        public void PushAllowKeyboardFocus(bool allowKeyboardFocus) => ImGui.PushAllowKeyboardFocus(allowKeyboardFocus);
-        public void PushButtonRepeat(bool repeat) => ImGui.PushButtonRepeat(repeat);
-        public void PushClipRect(Vector2 clipRectMin, Vector2 clipRectMax, bool intersectWithCurrentClipRect) => ImGui.PushClipRect(clipRectMin, clipRectMax, intersectWithCurrentClipRect);
-        public void PushFont(ImFontPtr font) => ImGui.PushFont(font);
-        public void PushId(string strId) => ImGui.PushID(strId);
-        public void PushId(IntPtr ptrId) => ImGui.PushID(ptrId);
-        public void PushId(int intId) => ImGui.PushID(intId);
-        public void PushItemWidth(float itemWidth) => ImGui.PushItemWidth(itemWidth);
-        public void PushStyleColor(ImGuiCol idx, uint col) => ImGui.PushStyleColor(idx, col);
-        public void PushStyleColor(ImGuiCol idx, Vector4 col) => ImGui.PushStyleColor(idx, col);
-        public void PushStyleVar(ImGuiStyleVar idx, float val) => ImGui.PushStyleVar(idx, val);
-        public void PushStyleVar(ImGuiStyleVar idx, Vector2 val) => ImGui.PushStyleVar(idx, val);
-        public void PushTextWrapPos() => ImGui.PushTextWrapPos();
-        public void PushTextWrapPos(float wrapLocalPosX) => ImGui.PushTextWrapPos(wrapLocalPosX);
-        public bool RadioButton(string label, bool active) => ImGui.RadioButton(label, active);
-        public bool RadioButton(string label, ref int v, int vButton) => ImGui.RadioButton(label, ref v, vButton);
-        public void Render() => ImGui.Render();
-        public void ResetMouseDragDelta() => ImGui.ResetMouseDragDelta();
-        public void ResetMouseDragDelta(int button) => ImGui.ResetMouseDragDelta(button);
-        public void SameLine() => ImGui.SameLine();
-        public void SameLine(float offsetFromStartX) => ImGui.SameLine(offsetFromStartX);
-        public void SameLine(float offsetFromStartX, float spacing) => ImGui.SameLine(offsetFromStartX, spacing);
-        public void SaveIniSettingsToDisk(string iniFilename) => ImGui.SaveIniSettingsToDisk(iniFilename);
-        public string SaveIniSettingsToMemory() => ImGui.SaveIniSettingsToMemory();
-        public string SaveIniSettingsToMemory(out uint outIniSize) => ImGui.SaveIniSettingsToMemory(out outIniSize);
-        public bool Selectable(string label) => ImGui.Selectable(label);
-        public bool Selectable(string label, bool selected) => ImGui.Selectable(label, selected);
-        public bool Selectable(string label, bool selected, ImGuiSelectableFlags flags) => ImGui.Selectable(label, selected, flags);
-        public bool Selectable(string label, bool selected, ImGuiSelectableFlags flags, Vector2 size) => ImGui.Selectable(label, selected, flags, size);
-        public bool Selectable(string label, ref bool pSelected) => ImGui.Selectable(label, pSelected);
-        public bool Selectable(string label, ref bool pSelected, ImGuiSelectableFlags flags) => ImGui.Selectable(label, pSelected, flags);
-        public bool Selectable(string label, ref bool pSelected, ImGuiSelectableFlags flags, Vector2 size) => ImGui.Selectable(label, pSelected, flags, size);
-        public void Separator() => ImGui.Separator();
-        public void SetClipboardText(string text) => ImGui.SetClipboardText(text);
-        public void SetColorEditOptions(ImGuiColorEditFlags flags) => ImGui.SetColorEditOptions(flags);
-        public void SetColumnOffset(int columnIndex, float offsetX) => ImGui.SetColumnOffset(columnIndex, offsetX);
-        public void SetColumnWidth(int columnIndex, float width) => ImGui.SetColumnWidth(columnIndex, width);
-        public void SetCurrentContext(IntPtr ctx) => ImGui.SetCurrentContext(ctx);
-        public void SetCursorPos(Vector2 localPos) => ImGui.SetCursorPos(localPos);
-        public void SetCursorPosX(float localX) => ImGui.SetCursorPosX(localX);
-        public void SetCursorPosY(float localY) => ImGui.SetCursorPosY(localY);
-        public void SetCursorScreenPos(Vector2 pos) => ImGui.SetCursorScreenPos(pos);
-        public bool SetDragDropPayload(string type, IntPtr data, uint sz) => ImGui.SetDragDropPayload(type, data, sz);
-        public bool SetDragDropPayload(string type, IntPtr data, uint sz, ImGuiCond cond) => ImGui.SetDragDropPayload(type, data, sz, cond);
-        public void SetItemAllowOverlap() => ImGui.SetItemAllowOverlap();
-        public void SetItemDefaultFocus() => ImGui.SetItemDefaultFocus();
-        public void SetKeyboardFocusHere() => ImGui.SetKeyboardFocusHere();
-        public void SetKeyboardFocusHere(int offset) => ImGui.SetKeyboardFocusHere(offset);
-        public void SetMouseCursor(ImGuiMouseCursor type) => ImGui.SetMouseCursor(type);
-        public void SetNextItemOpen(bool isOpen) => ImGui.SetNextItemOpen(isOpen);
-        public void SetNextItemOpen(bool isOpen, ImGuiCond cond) => ImGui.SetNextItemOpen(isOpen, cond);
-        public void SetNextItemWidth(float itemWidth) => ImGui.SetNextItemWidth(itemWidth);
-        public void SetNextWindowBgAlpha(float alpha) => ImGui.SetNextWindowBgAlpha(alpha);
-        public void SetNextWindowCollapsed(bool collapsed) => ImGui.SetNextWindowCollapsed(collapsed);
-        public void SetNextWindowCollapsed(bool collapsed, ImGuiCond cond) => ImGui.SetNextWindowCollapsed(collapsed, cond);
-        public void SetNextWindowContentSize(Vector2 size) => ImGui.SetNextWindowContentSize(size);
-        public void SetNextWindowFocus() => ImGui.SetNextWindowFocus();
-        public void SetNextWindowPos(Vector2 pos) => ImGui.SetNextWindowPos(pos);
-        public void SetNextWindowPos(Vector2 pos, ImGuiCond cond) => ImGui.SetNextWindowPos(pos, cond);
-        public void SetNextWindowPos(Vector2 pos, ImGuiCond cond, Vector2 pivot) => ImGui.SetNextWindowPos(pos, cond, pivot);
-        public void SetNextWindowSize(Vector2 size) => ImGui.SetNextWindowSize(size);
-        public void SetNextWindowSize(Vector2 size, ImGuiCond cond) => ImGui.SetNextWindowSize(size, cond);
-        public void SetNextWindowSizeConstraints(Vector2 sizeMin, Vector2 sizeMax) => ImGui.SetNextWindowSizeConstraints(sizeMin, sizeMax);
-        public void SetNextWindowSizeConstraints(Vector2 sizeMin, Vector2 sizeMax, ImGuiSizeCallback customCallback) => ImGui.SetNextWindowSizeConstraints(sizeMin, sizeMax, customCallback);
-        public void SetNextWindowSizeConstraints(Vector2 sizeMin, Vector2 sizeMax, ImGuiSizeCallback customCallback, IntPtr customCallbackData) => ImGui.SetNextWindowSizeConstraints(sizeMin, sizeMax, customCallback, customCallbackData);
-        public void SetScrollFromPosX(float localX) => ImGui.SetScrollFromPosX(localX);
-        public void SetScrollFromPosX(float localX, float centerXRatio) => ImGui.SetScrollFromPosX(localX, centerXRatio);
-        public void SetScrollFromPosY(float localY) => ImGui.SetScrollFromPosY(localY);
-        public void SetScrollFromPosY(float localY, float centerYRatio) => ImGui.SetScrollFromPosY(localY, centerYRatio);
-        public void SetScrollHereX() => ImGui.SetScrollHereX();
-        public void SetScrollHereX(float centerXRatio) => ImGui.SetScrollHereX(centerXRatio);
-        public void SetScrollHereY() => ImGui.SetScrollHereY();
-        public void SetScrollHereY(float centerYRatio) => ImGui.SetScrollHereY(centerYRatio);
-        public void SetScrollX(float scrollX) => ImGui.SetScrollX(scrollX);
-        public void SetScrollY(float scrollY) => ImGui.SetScrollY(scrollY);
-        public void SetStateStorage(ImGuiStoragePtr storage) => ImGui.SetStateStorage(storage);
-        public void SetTabItemClosed(string tabOrDockedWindowLabel) => ImGui.SetTabItemClosed(tabOrDockedWindowLabel);
-        public void SetTooltip(string fmt) => ImGui.SetTooltip(fmt);
-        public void SetWindowCollapsed(bool collapsed) => ImGui.SetWindowCollapsed(collapsed);
-        public void SetWindowCollapsed(bool collapsed, ImGuiCond cond) => ImGui.SetWindowCollapsed(collapsed, cond);
-        public void SetWindowCollapsed(string name, bool collapsed) => ImGui.SetWindowCollapsed(name, collapsed);
-        public void SetWindowCollapsed(string name, bool collapsed, ImGuiCond cond) => ImGui.SetWindowCollapsed(name, collapsed, cond);
-        public void SetWindowFocus() => ImGui.SetWindowFocus();
-        public void SetWindowFocus(string name) => ImGui.SetWindowFocus(name);
-        public void SetWindowFontScale(float scale) => ImGui.SetWindowFontScale(scale);
-        public void SetWindowPos(Vector2 pos) => ImGui.SetWindowPos(pos);
-        public void SetWindowPos(Vector2 pos, ImGuiCond cond) => ImGui.SetWindowPos(pos, cond);
-        public void SetWindowPos(string name, Vector2 pos) => ImGui.SetWindowPos(name, pos);
-        public void SetWindowPos(string name, Vector2 pos, ImGuiCond cond) => ImGui.SetWindowPos(name, pos, cond);
-        public void SetWindowSize(Vector2 size) => ImGui.SetWindowSize(size);
-        public void SetWindowSize(Vector2 size, ImGuiCond cond) => ImGui.SetWindowSize(size, cond);
-        public void SetWindowSize(string name, Vector2 size) => ImGui.SetWindowSize(name, size);
-        public void SetWindowSize(string name, Vector2 size, ImGuiCond cond) => ImGui.SetWindowSize(name, size, cond);
-        public void ShowAboutWindow() => ImGui.ShowAboutWindow();
-        public void ShowAboutWindow(ref bool pOpen) => ImGui.ShowAboutWindow(ref pOpen);
-        public void ShowDemoWindow() => ImGui.ShowDemoWindow();
-        public void ShowDemoWindow(ref bool pOpen) => ImGui.ShowDemoWindow(ref pOpen);
-        public void ShowFontSelector(string label) => ImGui.ShowFontSelector(label);
-        public void ShowMetricsWindow() => ImGui.ShowMetricsWindow();
-        public void ShowMetricsWindow(ref bool pOpen) => ImGui.ShowMetricsWindow(ref pOpen);
-        public void ShowStyleEditor() => ImGui.ShowStyleEditor();
-        public void ShowStyleEditor(ImGuiStylePtr @ref) => ImGui.ShowStyleEditor(@ref);
-        public bool ShowStyleSelector(string label) => ImGui.ShowStyleSelector(label);
-        public void ShowUserGuide() => ImGui.ShowUserGuide();
-        public bool SliderAngle(string label, ref float vRad) => ImGui.SliderAngle(label, ref vRad);
-        public bool SliderAngle(string label, ref float vRad, float vDegreesMin) => ImGui.SliderAngle(label, ref vRad, vDegreesMin);
-        public bool SliderAngle(string label, ref float vRad, float vDegreesMin, float vDegreesMax) => ImGui.SliderAngle(label, ref vRad, vDegreesMin, vDegreesMax);
-        public bool SliderAngle(string label, ref float vRad, float vDegreesMin, float vDegreesMax, string format) => ImGui.SliderAngle(label, ref vRad, vDegreesMin, vDegreesMax, format);
-        public bool SliderFloat(string label, ref float v, float vMin, float vMax) => ImGui.SliderFloat(label, ref v, vMin, vMax);
-        public bool SliderFloat(string label, ref float v, float vMin, float vMax, string format) => ImGui.SliderFloat(label, ref v, vMin, vMax, format);
-        public bool SliderFloat(string label, ref float v, float vMin, float vMax, string format, float power) => ImGui.SliderFloat(label, ref v, vMin, vMax, format, power);
-        public bool SliderFloat2(string label, ref Vector2 v, float vMin, float vMax) => ImGui.SliderFloat2(label, ref v, vMin, vMax);
-        public bool SliderFloat2(string label, ref Vector2 v, float vMin, float vMax, string format) => ImGui.SliderFloat2(label, ref v, vMin, vMax, format);
-        public bool SliderFloat2(string label, ref Vector2 v, float vMin, float vMax, string format, float power) => ImGui.SliderFloat2(label, ref v, vMin, vMax, format, power);
-        public bool SliderFloat3(string label, ref Vector3 v, float vMin, float vMax) => ImGui.SliderFloat3(label, ref v, vMin, vMax);
-        public bool SliderFloat3(string label, ref Vector3 v, float vMin, float vMax, string format) => ImGui.SliderFloat3(label, ref v, vMin, vMax, format);
-        public bool SliderFloat3(string label, ref Vector3 v, float vMin, float vMax, string format, float power) => ImGui.SliderFloat3(label, ref v, vMin, vMax, format, power);
-        public bool SliderFloat4(string label, ref Vector4 v, float vMin, float vMax) => ImGui.SliderFloat4(label, ref v, vMin, vMax);
-        public bool SliderFloat4(string label, ref Vector4 v, float vMin, float vMax, string format) => ImGui.SliderFloat4(label, ref v, vMin, vMax, format);
-        public bool SliderFloat4(string label, ref Vector4 v, float vMin, float vMax, string format, float power) => ImGui.SliderFloat4(label, ref v, vMin, vMax, format, power);
-        public bool SliderInt(string label, ref int v, int vMin, int vMax) => ImGui.SliderInt(label, ref v, vMin, vMax);
-        public bool SliderInt(string label, ref int v, int vMin, int vMax, string format) => ImGui.SliderInt(label, ref v, vMin, vMax, format);
-        public bool SliderInt2(string label, ref int v, int vMin, int vMax) => ImGui.SliderInt2(label, ref v, vMin, vMax);
-        public bool SliderInt2(string label, ref int v, int vMin, int vMax, string format) => ImGui.SliderInt2(label, ref v, vMin, vMax, format);
-        public bool SliderInt3(string label, ref int v, int vMin, int vMax) => ImGui.SliderInt3(label, ref v, vMin, vMax);
-        public bool SliderInt3(string label, ref int v, int vMin, int vMax, string format) => ImGui.SliderInt3(label, ref v, vMin, vMax, format);
-        public bool SliderInt4(string label, ref int v, int vMin, int vMax) => ImGui.SliderInt4(label, ref v, vMin, vMax);
-        public bool SliderInt4(string label, ref int v, int vMin, int vMax, string format) => ImGui.SliderInt4(label, ref v, vMin, vMax, format);
-        public bool SliderScalar(string label, ImGuiDataType dataType, IntPtr v, IntPtr vMin, IntPtr vMax) => ImGui.SliderScalar(label, dataType, v, vMin, vMax);
-        public bool SliderScalar(string label, ImGuiDataType dataType, IntPtr v, IntPtr vMin, IntPtr vMax, string format) => ImGui.SliderScalar(label, dataType, v, vMin, vMax, format);
-        public bool SliderScalar(string label, ImGuiDataType dataType, IntPtr v, IntPtr vMin, IntPtr vMax, string format, float power) => ImGui.SliderScalar(label, dataType, v, vMin, vMax, format, power);
-        public bool SliderScalarN(string label, ImGuiDataType dataType, IntPtr v, int components, IntPtr vMin, IntPtr vMax) => ImGui.SliderScalarN(label, dataType, v, components, vMin, vMax);
-        public bool SliderScalarN(string label, ImGuiDataType dataType, IntPtr v, int components, IntPtr vMin, IntPtr vMax, string format) => ImGui.SliderScalarN(label, dataType, v, components, vMin, vMax, format);
-        public bool SliderScalarN(string label, ImGuiDataType dataType, IntPtr v, int components, IntPtr vMin, IntPtr vMax, string format, float power) => ImGui.SliderScalarN(label, dataType, v, components, vMin, vMax, format, power);
-        public bool SmallButton(string label) => ImGui.SmallButton(label);
-        public void Spacing() => ImGui.Spacing();
-        public void StyleColorsClassic() => ImGui.StyleColorsClassic();
-        public void StyleColorsClassic(ImGuiStylePtr dst) => ImGui.StyleColorsClassic(dst);
-        public void StyleColorsDark() => ImGui.StyleColorsDark();
-        public void StyleColorsDark(ImGuiStylePtr dst) => ImGui.StyleColorsDark(dst);
-        public void StyleColorsLight() => ImGui.StyleColorsLight();
-        public void StyleColorsLight(ImGuiStylePtr dst) => ImGui.StyleColorsLight(dst);
-        public void Text(string fmt) => ImGui.Text(fmt);
-        public void TextColored(Vector4 col, string fmt) => ImGui.TextColored(col, fmt);
-        public void TextDisabled(string fmt) => ImGui.TextDisabled(fmt);
-        public void TextUnformatted(string text) => ImGui.TextUnformatted(text);
-        public void TextWrapped(string fmt) => ImGui.TextWrapped(fmt);
-        public bool TreeNode(string label) => ImGui.TreeNode(label);
-        public bool TreeNode(string strId, string fmt) => ImGui.TreeNode(strId, fmt);
-        public bool TreeNode(IntPtr ptrId, string fmt) => ImGui.TreeNode(ptrId, fmt);
-        public bool TreeNodeEx(string label) => ImGui.TreeNodeEx(label);
-        public bool TreeNodeEx(string label, ImGuiTreeNodeFlags flags) => ImGui.TreeNodeEx(label, flags);
-        public bool TreeNodeEx(string strId, ImGuiTreeNodeFlags flags, string fmt) => ImGui.TreeNodeEx(strId, flags, fmt);
-        public bool TreeNodeEx(IntPtr ptrId, ImGuiTreeNodeFlags flags, string fmt) => ImGui.TreeNodeEx(ptrId, flags, fmt);
-        public void TreePop() => ImGui.TreePop();
-        public void TreePush(string strId) => ImGui.TreePush(strId);
-        public void TreePush() => ImGui.TreePush();
-        public void TreePush(IntPtr ptrId) => ImGui.TreePush(ptrId);
-        public void Unindent() => ImGui.Unindent();
-        public void Unindent(float indentW) => ImGui.Unindent(indentW);
-        public void Value(string prefix, bool b) => ImGui.Value(prefix, b);
-        public void Value(string prefix, int v) => ImGui.Value(prefix, v);
-        public void Value(string prefix, uint v) => ImGui.Value(prefix, v);
-        public void Value(string prefix, float v) => ImGui.Value(prefix, v);
-        public void Value(string prefix, float v, string floatFormat) => ImGui.Value(prefix, v, floatFormat);
-        public bool VSliderFloat(string label, Vector2 size, ref float v, float vMin, float vMax) => ImGui.VSliderFloat(label, size, ref v, vMin, vMax);
-        public bool VSliderFloat(string label, Vector2 size, ref float v, float vMin, float vMax, string format) => ImGui.VSliderFloat(label, size, ref v, vMin, vMax, format);
-        public bool VSliderFloat(string label, Vector2 size, ref float v, float vMin, float vMax, string format, float power) => ImGui.VSliderFloat(label, size, ref v, vMin, vMax, format, power);
-        public bool VSliderInt(string label, Vector2 size, ref int v, int vMin, int vMax) => ImGui.VSliderInt(label, size, ref v, vMin, vMax);
-        public bool VSliderInt(string label, Vector2 size, ref int v, int vMin, int vMax, string format) => ImGui.VSliderInt(label, size, ref v, vMin, vMax, format);
-        public bool VSliderScalar(string label, Vector2 size, ImGuiDataType dataType, IntPtr v, IntPtr vMin, IntPtr vMax) => ImGui.VSliderScalar(label, size, dataType, v, vMin, vMax);
-        public bool VSliderScalar(string label, Vector2 size, ImGuiDataType dataType, IntPtr v, IntPtr vMin, IntPtr vMax, string format) => ImGui.VSliderScalar(label, size, dataType, v, vMin, vMax, format);
-        public bool VSliderScalar(string label, Vector2 size, ImGuiDataType dataType, IntPtr v, IntPtr vMin, IntPtr vMax, string format, float power) => ImGui.VSliderScalar(label, size, dataType, v, vMin, vMax, format, power);
+        public IntPtr CreateTexture(Texture texture)
+        {
+            return _imguiWindow.CreateTexture(texture);
+        }
     }
 }

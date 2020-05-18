@@ -1,10 +1,11 @@
+#if IMGUI_OLD_DEMO
 using System.Drawing;
 using System.Numerics;
 using Veldrid;
 
 namespace ImGuiNET
 {
-    public class ImguiProgramSample : ImguiProgram
+    internal class ImguiProgramSample : ImguiWindow
     {
         // UI state
         private float _f;
@@ -43,7 +44,7 @@ namespace ImGuiNET
 
                 ImGui.DragInt("Draggable Int", ref _dragInt);
 
-                float framerate = ImGui.GetIO().Framerate;
+                var framerate = ImGui.GetIO().Framerate;
                 ImGui.Text($"Application average {1000.0f / framerate:0.##} ms/frame ({framerate:0.#} FPS)");
             }
 
@@ -140,3 +141,4 @@ namespace ImGuiNET
         }
     }
 }
+#endif

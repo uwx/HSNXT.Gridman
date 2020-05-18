@@ -1,14 +1,12 @@
 ﻿using System;
 using System.Drawing;
-using System.IO;
 using System.Numerics;
-using System.Threading;
 using System.Threading.Tasks;
+using HSNXT.QuickAndDirtyGui.Extensions;
 using ImGuiNET;
 using JetBrains.Annotations;
 using Veldrid;
 using Veldrid.Sdl2;
-using static HSNXT.QuickAndDirtyGui.ImportMeHelpers;
 
 namespace HSNXT.QuickAndDirtyGui
 {
@@ -37,7 +35,6 @@ namespace HSNXT.QuickAndDirtyGui
         private float _fps = 60;
         private bool _vsync = true;
         private Color? _backgroundColor = Color.FromArgb(255, 255, 255);
-        private bool _enableIconsForAllFonts;
         
         public GuiWindowBuilder WithPosition(int x, int y)
         {
@@ -96,13 +93,13 @@ namespace HSNXT.QuickAndDirtyGui
             return this;
         }
 
-        public GuiWindowBuilder OnFirstUpdate(Action<GuiContainer> init)
+        public GuiWindowBuilder OnFirstUpdate(Action<GuiContainer>? init)
         {
             _init = init;
             return this;
         }
 
-        public GuiWindowBuilder OnUpdate(Action<GuiContainer> update)
+        public GuiWindowBuilder OnUpdate(Action<GuiContainer>? update)
         {
             _update = update;
             return this;
@@ -126,15 +123,9 @@ namespace HSNXT.QuickAndDirtyGui
             return this;
         }
 
-        public GuiWindowBuilder EnableIconsForAllFonts()
+        public static async Task CreateAsync(Action<GuiContainer> onUpdate, Action<GuiContainer>? onFirstUpdate = null)
         {
-            _enableIconsForAllFonts = true;
-            return this;
-        }
-
-        public static Task CreateAsync(Action<GuiContainer> onUpdate, Action<GuiContainer>? onFirstUpdate = null)
-        {
-            return new GuiWindowBuilder()
+            await new GuiWindowBuilder()
                 .OnUpdate(onUpdate)
                 .OnFirstUpdate(onFirstUpdate)
                 .ShowAsync();
@@ -152,267 +143,71 @@ namespace HSNXT.QuickAndDirtyGui
 
         public Task ShowAsync()
         {
-            var tcs = new TaskCompletionSource<bool>();
-
-            new Thread(() =>
+            return Task.Factory.StartNew(() =>
             {
-                var guiWindow = new GuiWindow(
-                    _update,
-                    _init,
-                    _x,
-                    _y,
-                    _width,
-                    _height,
-                    _state,
-                    _title,
-                    _fps,
-                    _vsync,
-                    _backgroundColor,
-                    _enableIconsForAllFonts
-                );
+                var guiWindow = new GuiWindow(_x, _y, _width, _height, _state, _title)
+                {
+                    OnInit = _init,
+                    OnLayout = _update,
+                    Fps = _fps,
+                    VSync = _vsync,
+                    BackgroundColor = _backgroundColor,
+                };
                 guiWindow.Show();
-                tcs.TrySetResult(true);
-            }).Start();
-
-            return tcs.Task;
+            }, TaskCreationOptions.LongRunning);
         }
     }
 
     [PublicAPI]
-    public sealed class GuiWindow : ImguiProgram
+    internal sealed class GuiWindow
     {
-        // ReSharper disable InconsistentNaming
-        private const string Roboto_ThinItalic_Name = "Roboto-ThinItalic.otf";
-        private const string Roboto_Black_Name = "Roboto-Black.otf";
-        private const string Roboto_BlackItalic_Name = "Roboto-BlackItalic.otf";
-        private const string Roboto_Bold_Name = "Roboto-Bold.otf";
-        private const string Roboto_BoldItalic_Name = "Roboto-BoldItalic.otf";
-        private const string Roboto_Italic_Name = "Roboto-Italic.otf";
-        private const string Roboto_Light_Name = "Roboto-Light.otf";
-        private const string Roboto_LightItalic_Name = "Roboto-LightItalic.otf";
-        private const string Roboto_Medium_Name = "Roboto-Medium.otf";
-        private const string Roboto_MediumItalic_Name = "Roboto-MediumItalic.otf";
-        private const string RobotoMono_Bold_Name = "RobotoMono-Bold.otf";
-        private const string RobotoMono_Light_Name = "RobotoMono-Light.otf";
-        private const string RobotoMono_Medium_Name = "RobotoMono-Medium.otf";
-        private const string RobotoMono_Regular_Name = "RobotoMono-Regular.otf";
-        private const string Roboto_Regular_Name = "Roboto-Regular.otf";
-        private const string Roboto_Thin_Name = "Roboto-Thin.otf";
-
-        private readonly string NerdFont_Name = "Arimo Italic Nerd Font Complete Windows Compatible.ttf";
-        // ReSharper restore InconsistentNaming
-
-        private readonly Action<GuiContainer>? _onLayout;
-        private readonly Action<GuiContainer>? _onInit;
-        private bool _firstTime = true;
-        private bool _iconsAllFonts;
-        private GuiContainer _gui;
-
-        internal GuiWindow(
-            Action<GuiContainer>? onLayout, Action<GuiContainer>? onInit, int x, int y, int width, int height, WindowState state,
-            string title, float fps = 60, bool vsync = true, Color? backgroundColor = null,
-            bool enableIconsForAllFonts = false, bool resizable = true, bool forceHideBorder = false,
-            float? opacity = null, bool? cursorVisible = null
-        )
-            : base(x, y, width, height, state, title, fps, vsync, backgroundColor)
+        internal Action<GuiContainer>? OnLayout { private get; set; }
+        internal Action<GuiContainer>? OnInit { private get; set; }
+        
+        internal float Fps
         {
-            _iconsAllFonts = enableIconsForAllFonts;
-            Initialized += SetUpImGui;
-            _onLayout = onLayout;
-            _onInit = onInit;
-            Window.Resizable = resizable;
-            if (forceHideBorder) Window.BorderVisible = false;
-            if (opacity != null) Window.Opacity = opacity.Value;
-            if (cursorVisible != null) Window.CursorVisible = cursorVisible.Value;
-            _gui = new GuiContainer(Window);
+            set => _imguiWindow.Fps = value;
+        }
+        internal bool VSync
+        {
+            set => _imguiWindow.VSync = value;
+        }
+        internal Color? BackgroundColor
+        {
+            set
+            {
+                if (value != null) _imguiWindow.BackgroundColor = value.Value;
+            }
         }
 
-        protected override void SubmitUI()
-        {
-            ImGui.PushFont(_gui.Roboto_Regular);
-            {
-                if (_firstTime)
-                {
-                    _onInit?.Invoke(_gui);
-                    ImGui.SetNextWindowFocus();
-                    _firstTime = false;
-                }
+        internal bool Resizable { private get; set; } = true;
+        internal bool ForceHideBorder { private get; set; } = false;
+        internal float? Opacity { private get; set; } = null;
+        internal bool? CursorVisible { private get; set; } = null;
 
-                ImGui.SetNextWindowPos(new Vector2(0, 0));
-                ImGui.SetNextWindowSize(new Vector2(Window.Width, Window.Height));
-                ImGui.Begin("Main Window",
-                    ImGuiWindowFlags.NoTitleBar
-                    | ImGuiWindowFlags.NoResize
-                    | ImGuiWindowFlags.NoMove
-                    | ImGuiWindowFlags.NoCollapse
-                    | ImGuiWindowFlags.NoBringToFrontOnFocus);
-                {
-                    _onLayout?.Invoke(_gui);
-                }
-                ImGui.End();
-            }
-            ImGui.PopFont();
+        private bool _isFirstFrame = true;
+        private GuiContainer? _gui;
+        private ImguiWindow _imguiWindow;
+
+        internal GuiWindow(int x, int y, int width, int height, WindowState state, string title)
+        {
+            _imguiWindow = new ImguiWindow(x, y, width, height, state, title);
+            _imguiWindow.Initialized += SetUpImGui;
+            _imguiWindow.SubmitUI = SubmitUI;
         }
 
-        public void SetUpImGui()
+        internal void Show()
         {
-            var resourceAssembly = typeof(GuiWindow).Assembly;
+            _imguiWindow.Show();
+        }
 
-            using var handles = new DisposableCollection<IDisposable>();
+        private void SetUpImGui(Sdl2Window window)
+        {
+            _gui = new GuiContainer(this, window, _imguiWindow) {IO = ImGui.GetIO()};
 
-            using var nerdFontData = UnmanagedBlock.From(GetResource(NerdFont_Name));
-            using var nerdFontCfg = new_ImFontConfigPtr();
-            nerdFontCfg.V.Name.StringValue(NerdFont_Name);
-            nerdFontCfg.V.OversampleH = 1;
-            nerdFontCfg.V.OversampleV = 1;
-            nerdFontCfg.V.MergeMode = true;
+            GuiFonts.EnsureFontsReady();
 
-            const float fontSize = 18F;
-
-            byte[] GetResource(string name)
-            {
-                var memoryStream = new MemoryStream();
-                using (var stream = resourceAssembly.GetManifestResourceStream(typeof(GuiWindow), name))
-                {
-                    stream.CopyTo(memoryStream);
-                }
-
-                return memoryStream.ToArray();
-            }
-
-            void LoadNerdFont()
-            {
-                using var builderPtr = new_ImFontGlyphRangesBuilderPtr();
-
-                using var ranges = new[] // null-terminated ImWchar*
-                {
-                    '\ue5fa', '\ue62b',
-                    '\ue700', '\ue7c5',
-                    '\uf000', '\uf2e0',
-                    '\ue200', '\ue2a9',
-                    '\uf500', '\ufd46',
-                    '\ue300', '\ue3eb',
-                    '\uf400', '\uf4a8',
-                    '\ue0b4', '\ue0c8',
-                    '\ue0cc', '\ue0d2',
-                    '\u23fb', '\u23fe',
-                    '\uf300', '\uf313',
-                    '\ue000', '\ue00d',
-                    '\0'
-                }.ToArrayPtrWide();
-                builderPtr.V.AddRanges(ranges.UnmanagedPointer);
-                builderPtr.V.AddChar('\u2b58');
-                builderPtr.V.AddChar('\ue0d4');
-                builderPtr.V.AddChar('\u2665');
-                builderPtr.V.AddChar('\u26A1');
-                builderPtr.V.AddChar('\uf27c');
-                builderPtr.V.AddChar('\ue0a3');
-                builderPtr.V.BuildRanges(out var rangesVector);
-
-                AddFont(nerdFontCfg, nerdFontData, fontSize, rangesVector.Data);
-            }
-
-            ImFontPtr GetFont(string resourceName, IntPtr? glyphRanges = null)
-            {
-                var data = GetResource(resourceName);
-                var (font, handle) = AddFont(resourceName, data, fontSize, glyphRanges);
-                handles.Add(handle);
-                return font;
-            }
-
-            _gui.IO = ImGui.GetIO();
-
-            _gui.IOFonts.AddFontDefault();
-            if (_iconsAllFonts) LoadNerdFont();
-
-            _gui.Roboto_Regular = GetFont(Roboto_Regular_Name);
-            LoadNerdFont();
-
-            _gui.Roboto_Thin = GetFont(Roboto_Thin_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-            _gui.Roboto_Light = GetFont(Roboto_Light_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-            _gui.Roboto_Medium = GetFont(Roboto_Medium_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-            _gui.Roboto_Bold = GetFont(Roboto_Bold_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-            _gui.Roboto_Black = GetFont(Roboto_Black_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-
-            _gui.Roboto_Italic = GetFont(Roboto_Italic_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-            _gui.Roboto_ThinItalic = GetFont(Roboto_ThinItalic_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-            _gui.Roboto_LightItalic = GetFont(Roboto_LightItalic_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-            _gui.Roboto_MediumItalic = GetFont(Roboto_MediumItalic_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-            _gui.Roboto_BoldItalic = GetFont(Roboto_BoldItalic_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-            _gui.Roboto_BlackItalic = GetFont(Roboto_BlackItalic_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-
-            _gui.RobotoMono_Light = GetFont(RobotoMono_Light_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-            _gui.RobotoMono_Regular = GetFont(RobotoMono_Regular_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-            _gui.RobotoMono_Medium = GetFont(RobotoMono_Medium_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-            _gui.RobotoMono_Bold = GetFont(RobotoMono_Bold_Name);
-            if (_iconsAllFonts) LoadNerdFont();
-
-            /*unsafe
-            {
-                var ranges = stackalloc ushort[] // null-terminated ImWchar*
-                {
-                    '\ue5fa', '\ue62b',
-                    '\ue700', '\ue7c5',
-                    '\uf000', '\uf2e0',
-                    '\ue200', '\ue2a9',
-                    '\uf500', '\ufd46',
-                    '\ue300', '\ue3eb',
-                    '\uf400', '\uf4a8',
-                    '\ue0b4', '\ue0c8',
-                    '\ue0cc', '\ue0d2',
-                    '\u23fb', '\u23fe',
-                    '\uf300', '\uf313',
-                    '\ue000', '\ue00d',
-                    '\0'
-                };
-
-                var bld = new ImFontGlyphRangesBuilder();
-                ImFontGlyphRangesBuilderPtr builderPtr = &bld;
-                
-                builderPtr.AddRanges(new IntPtr(ranges));
-                builderPtr.AddChar('\u2b58');
-                builderPtr.AddChar('\ue0d4');
-                builderPtr.AddChar('\u2665');
-                builderPtr.AddChar('\u26A1');
-                builderPtr.AddChar('\uf27c');
-                builderPtr.AddChar('\ue0a3');
-                builderPtr.BuildRanges(out var rangesVector);
-
-                GetFont(NerdFont_Name, new IntPtr(&rangesVector));
-                IoFonts.Build(); // build atlas here so ranges doesn't get deleted too early
-            }*/
-
-            //IoFonts.TexDesiredWidth = 16384;
-            var res = _gui.IOFonts.Build(); // build atlas here so ranges doesn't get deleted too early
-            Console.WriteLine(res);
+            SetWindowParameters(window);
 
             // TODO fix memory leak
             unsafe
@@ -420,6 +215,46 @@ namespace HSNXT.QuickAndDirtyGui
                 _gui.IO.NativePtr->IniFilename = null; // disable .ini save/load
             }
 
+            SetDefaultStyle();
+        }
+
+        private void SubmitUI(Sdl2Window window)
+        {
+            ImGui.PushFont(GuiFonts.Roboto_Regular);
+            {
+                if (_isFirstFrame)
+                {
+                    OnInit?.Invoke(_gui!);
+                    ImGui.SetNextWindowFocus();
+                    _isFirstFrame = false;
+                }
+
+                ImGui.SetNextWindowPos(new Vector2(0, 0));
+                ImGui.SetNextWindowSize(new Vector2(window.Width, window.Height));
+                ImGui.Begin("Main Window",
+                    ImGuiWindowFlags.NoTitleBar
+                    | ImGuiWindowFlags.NoResize
+                    | ImGuiWindowFlags.NoMove
+                    | ImGuiWindowFlags.NoCollapse
+                    | ImGuiWindowFlags.NoBringToFrontOnFocus);
+                {
+                    OnLayout?.Invoke(_gui!);
+                }
+                ImGui.End();
+            }
+            ImGui.PopFont();
+        }
+
+        private void SetWindowParameters(Sdl2Window window)
+        {
+            window.Resizable = Resizable;
+            if (ForceHideBorder) window.BorderVisible = false;
+            if (Opacity != null) window.Opacity = Opacity.Value;
+            if (CursorVisible != null) window.CursorVisible = CursorVisible.Value;
+        }
+
+        private static void SetDefaultStyle()
+        {
             var style = ImGui.GetStyle();
             style.FrameRounding = 2;
             style.WindowBorderSize = 0;
@@ -434,7 +269,7 @@ namespace HSNXT.QuickAndDirtyGui
             style.ItemSpacing = new Vector2(6, 6);
             style.ItemInnerSpacing = new Vector2(6, 6);
 
-            var colors = style.GetColorList();
+            var colors = style.GetColors();
             colors[ImGuiCol.Text] = new Vector4(1.00f, 1.00f, 1.00f, 1.00f);
             colors[ImGuiCol.TextDisabled] = new Vector4(0.40f, 0.40f, 0.40f, 1.00f);
             colors[ImGuiCol.ChildBg] = new Vector4(0.25f, 0.25f, 0.25f, 1.00f);
@@ -490,77 +325,5 @@ namespace HSNXT.QuickAndDirtyGui
             colors[ImGuiCol.PopupBg] = new Vector4(0.07f, 0.07f, 0.07f, 1.00f);
         }
 
-        /// <summary>
-        /// Adds an OTF/TTF font to the current atlas from a file path.
-        /// </summary>
-        /// <param name="font">The file path of the font</param>
-        /// <param name="sizePixels">The size, in pixels, of the font</param>
-        /// <param name="glyphRanges">
-        /// A pointer to a null-terminated wchar list (ushort[]) containing the to-from character ranges to map the font
-        /// to. If <c>null</c>, the all characters will be used.
-        /// </param>
-        /// <returns>The added font's handle</returns>
-        public ImFontPtr AddFont(string font, float sizePixels, IntPtr? glyphRanges = null)
-        {
-            return _gui.IOFonts.AddFontFromFileTTF(font, sizePixels, glyphRanges ?? IntPtr.Zero);
-        }
-
-        /// <summary>
-        /// Adds an OTF/TTF font from a byte array.
-        /// </summary>
-        /// <param name="name">The display name of the font</param>
-        /// <param name="font">The contents of the font file</param>
-        /// <param name="sizePixels">The size, in pixels, of the font</param>
-        /// <param name="glyphRanges">
-        /// A pointer to a null-terminated wchar list (ushort[]) containing the to-from character ranges to map the font
-        /// to. If <c>null</c>, the all characters will be used.
-        /// </param>
-        /// <returns>
-        /// The added font's handle, and a handle that should be disposed after <see cref="ImFontAtlasPtr.Build"/> is
-        /// called
-        /// </returns>
-        public (ImFontPtr, UnmanagedBlock) AddFont(string name, byte[] font, float sizePixels, IntPtr? glyphRanges = null)
-        {
-            var memory = UnmanagedBlock.From(font);
-            return (
-                AddFont(name, memory, sizePixels, glyphRanges),
-                memory
-            );
-        }
-        
-        /// <summary>
-        /// Adds an OTF/TTF font from a previously created <see cref="UnmanagedBlock"/>.
-        /// </summary>
-        /// <param name="name">The display name of the font</param>
-        /// <param name="font">The contents of the font file</param>
-        /// <param name="sizePixels">The size, in pixels, of the font</param>
-        /// <param name="glyphRanges">
-        /// A pointer to a null-terminated wchar list (ushort[]) containing the to-from character ranges to map the font
-        /// to. If <c>null</c>, the all characters will be used.
-        /// </param>
-        /// <returns>The added font's handle</returns>
-        public ImFontPtr AddFont(string name, UnmanagedBlock font, float sizePixels, IntPtr? glyphRanges = null)
-        {
-            using var fontCfg = new_ImFontConfigPtr();
-            fontCfg.V.Name.StringValue(name);
-
-            return AddFont(fontCfg, font, sizePixels, glyphRanges);
-        }
-
-        /// <summary>
-        /// Adds an OTF/TTF font from a previously created <see cref="UnmanagedBlock"/>.
-        /// </summary>
-        /// <param name="fontConfig">The font configuration settings.</param>
-        /// <param name="font">The contents of the font file</param>
-        /// <param name="sizePixels">The size, in pixels, of the font</param>
-        /// <param name="glyphRanges">
-        /// A pointer to a null-terminated wchar list (ushort[]) containing the to-from character ranges to map the font
-        /// to. If <c>null</c>, the all characters will be used.
-        /// </param>
-        /// <returns>The added font's handle</returns>
-        public ImFontPtr AddFont(ImFontConfigPtr fontConfig, UnmanagedBlock font, float sizePixels, IntPtr? glyphRanges = null)
-        {
-            return _gui.IOFonts.AddFontFromMemoryTTF(font.UnmanagedPointer, font.Size, sizePixels, fontConfig, glyphRanges ?? IntPtr.Zero);
-        }
     }
 }
