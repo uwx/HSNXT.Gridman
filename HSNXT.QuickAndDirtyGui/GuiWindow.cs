@@ -239,6 +239,7 @@ namespace HSNXT.QuickAndDirtyGui
                     | ImGuiWindowFlags.NoBringToFrontOnFocus);
                 {
                     OnLayout?.Invoke(_gui!);
+                    _gui!.AssertAllDefinesAreBalanced();
                 }
                 ImGui.End();
             }

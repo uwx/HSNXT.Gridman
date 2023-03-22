@@ -127,7 +127,7 @@ namespace ImGuiNET
 
         public void Show()
         {
-            if (_graphicsDevice == null || _renderer == null)
+            if (_graphicsDevice != null || _renderer != null)
             {
                 throw new InvalidOperationException("Program initialized twice before the first execution returned to caller");
             }
@@ -149,6 +149,10 @@ namespace ImGuiNET
             void OnWindowResized()
             {
                 // ReSharper disable AccessToDisposedClosure
+                if (_graphicsDevice == null || _renderer == null)
+                {
+                    return;
+                }
                 _graphicsDevice.MainSwapchain.Resize((uint) window.Width, (uint) window.Height);
                 _renderer.WindowResized(window.Width, window.Height);
                 // ReSharper restore AccessToDisposedClosure

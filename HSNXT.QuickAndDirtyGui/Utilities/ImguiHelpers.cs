@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using ImGuiNET;
 using static System.Linq.Expressions.Expression;
@@ -64,28 +65,50 @@ namespace HSNXT.QuickAndDirtyGui
 
         public T Value { [MethodImpl(MethodImplOptions.AggressiveInlining)] get; }
 
+        private static unsafe IntPtr ToIntPtr<T1>(T1* any) where T1 : unmanaged
+        {
+            return (IntPtr) any;
+        }
+
         static ImguiPointer()
         {
             if (typeof(T).Assembly != typeof(ImGui).Assembly)
             {
                 throw new ArgumentException("Type not accepted, must be part of ImGui.NET", nameof(T));
             }
-
+            
             var instanceParam = Parameter(typeof(T), "ptrInstance");
 
-            var destroyMethod =
-                typeof(T).GetMethod("Destroy")
-                ?? throw new InvalidOperationException($"{typeof(T)} missing Destroy method");
+            {
+                var destroyMethod =
+                    typeof(T).GetMethod("Destroy")
+                    ?? throw new InvalidOperationException($"{typeof(T)} missing Destroy method");
+
+                // ptrInstance => ptrInstance.Destroy()
+                Destroy = Lambda<Action<T>>(instanceParam.Call(destroyMethod), instanceParam).Compile();
+            }
             
-            // ptrInstance => ptrInstance.Destroy()
-            Destroy = Lambda<Action<T>>(instanceParam.Call(destroyMethod), instanceParam).Compile();
+            {
+                var nativePtrProperty =
+                    typeof(T).GetProperty("NativePtr")
+                    ?? throw new InvalidOperationException($"{typeof(T)} missing NativePtr property");
 
-            var nativePtrProperty =
-                typeof(T).GetProperty("NativePtr")
-                ?? throw new InvalidOperationException($"{typeof(T)} missing NativePtr property");
+                var toIntPtrMethod =
+                    typeof(ImguiPointer<T>).GetMethod("ToIntPtr", BindingFlags.NonPublic | BindingFlags.Static)
+                    ?? throw new InvalidOperationException($"{typeof(ImguiPointer<T>)} missing {nameof(ToIntPtr)} method");
 
-            // ptrInstance => (IntPtr) ptrInstance.NativePtr
-            GetNativePtr = Lambda<Func<T, IntPtr>>(instanceParam.Property(nativePtrProperty).Convert(typeof(IntPtr)), instanceParam).Compile();
+                var toIntPtrGenericMethod =
+                    toIntPtrMethod.MakeGenericMethod(
+                        nativePtrProperty.PropertyType.GetElementType()
+                        ?? throw new InvalidOperationException($"{nativePtrProperty} has no element type")
+                    );
+
+                // ptrInstance => (IntPtr) ptrInstance.NativePtr
+                GetNativePtr = Lambda<Func<T, IntPtr>>(
+                    toIntPtrGenericMethod.Call(instanceParam.Property(nativePtrProperty)),
+                    instanceParam
+                ).Compile();
+            }
         }
 
         public ImguiPointer(T instance)

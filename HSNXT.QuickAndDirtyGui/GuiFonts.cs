@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 using HSNXT.QuickAndDirtyGui.Extensions;
 using ImGuiNET;
 using JetBrains.Annotations;
@@ -9,7 +10,8 @@ namespace HSNXT.QuickAndDirtyGui
 {
     public static class GuiFonts
     {
-        public static bool IsInitialized { get; private set; }
+        public static bool IsInitialized => _isInitialized != 0;
+        private static int _isInitialized;
 
         public static bool EnableIconsForAllFonts
         {
@@ -37,7 +39,7 @@ namespace HSNXT.QuickAndDirtyGui
             }
         }
 
-        private static readonly object InitializationLock = new object();
+        private static readonly object AtlasLock = new object();
         private static readonly IntPtr FontAtlasId = (IntPtr)1;
 
         private static ImGuiIOPtr _io;
@@ -87,19 +89,22 @@ namespace HSNXT.QuickAndDirtyGui
 
         internal static void EnsureFontsReady()
         {
-            lock (InitializationLock)
+            if (Interlocked.CompareExchange(ref _isInitialized, 1, 1) == 1)
             {
-                if (IsInitialized)
-                {
-                    return;
-                }
-
-                IsInitialized = true;
+                return;
             }
 
+            lock (AtlasLock)
+            {
+                EnsureFontsReadyLocked();
+            }
+        }
+
+        private static void EnsureFontsReadyLocked()
+        {
             using var handles = new DisposableList<IDisposable>();
 
-            using var nerdFontData = GetResource(NerdFont_Name);
+            using var nerdFontData = GetResource("Fonts." + NerdFont_Name);
             using var nerdFontCfg = new_ImFontConfigPtr();
             nerdFontCfg.Value.Name.StringValue(NerdFont_Name);
             nerdFontCfg.Value.OversampleH = 1;
@@ -110,11 +115,6 @@ namespace HSNXT.QuickAndDirtyGui
 
             void InjectNerdFont()
             {
-                if (!_enableNerdFontIcons)
-                {
-                    return;
-                }
-
                 using var builderPtr = new_ImFontGlyphRangesBuilderPtr();
 
                 using var ranges = new[] // null-terminated ImWchar*
@@ -147,16 +147,16 @@ namespace HSNXT.QuickAndDirtyGui
 
             ImFontPtr GetFont(string resourceName, IntPtr? glyphRanges = null)
             {
-                var handle = GetResource(resourceName);
+                var handle = GetResource("Fonts." + resourceName);
                 var font = AddFont(resourceName, handle, fontSize, glyphRanges);
                 handles.Add(handle);
                 return font;
             }
 
-            ImFontPtr GetFontAndInject(string resourceName)
+            ImFontPtr GetFontAndInject(string resourceName, bool overrideInject = false)
             {
                 var resultFont = GetFont(resourceName);
-                if (_enableIconsForAllFonts)
+                if (overrideInject || _enableIconsForAllFonts)
                 {
                     InjectNerdFont();
                 }
@@ -166,12 +166,12 @@ namespace HSNXT.QuickAndDirtyGui
 
             _io = ImGui.GetIO();
 
+            //
             IOFonts.AddFontDefault();
             if (_enableIconsForAllFonts) InjectNerdFont();
+            //
 
-            Roboto_Regular = GetFont(Roboto_Regular_Name);
-            InjectNerdFont();
-
+            Roboto_Regular = GetFontAndInject(Roboto_Regular_Name, _enableNerdFontIcons);
             Roboto_Thin = GetFontAndInject(Roboto_Thin_Name);
             Roboto_Light = GetFontAndInject(Roboto_Light_Name);
             Roboto_Medium = GetFontAndInject(Roboto_Medium_Name);
@@ -194,6 +194,7 @@ namespace HSNXT.QuickAndDirtyGui
             Console.WriteLine(res);
         }
 
+        // Gets font atlas and assures _fontAtlas is set
         internal static unsafe NativeArray GetFontAtlas(
             out int width,
             out int height,
@@ -202,7 +203,7 @@ namespace HSNXT.QuickAndDirtyGui
             EnsureFontsReady();
 
             // we can use the same lock here, so long as we don't call EnsureFontsReady from inside it 
-            lock (InitializationLock)
+            lock (AtlasLock)
             {
                 if (_fontAtlas != null)
                 {
@@ -229,15 +230,16 @@ namespace HSNXT.QuickAndDirtyGui
             }
         }
 
+        
         public static void DestroyFonts()
         {
-            lock (InitializationLock)
+            if (Interlocked.CompareExchange(ref _isInitialized, 0, 0) == 0)
             {
-                if (!IsInitialized)
-                {
-                    throw new InvalidOperationException("Cannot destroy font data, there is nothing to destroy");
-                }
+                throw new InvalidOperationException("Cannot destroy font data, there is nothing to destroy");
+            }
 
+            lock (AtlasLock)
+            {
                 // if GetFontAtlas has not been called yet, it's likely that the fonts are being destroyed before the
                 // window is finished initializing. this isn't an issue as the initialization process will execute again
                 // just fine, but that means this operation will have no meaningful result and the atlas will be
@@ -253,8 +255,6 @@ namespace HSNXT.QuickAndDirtyGui
                 }
 
                 IOFonts.Clear();
-
-                IsInitialized = false;
             }
         }
 

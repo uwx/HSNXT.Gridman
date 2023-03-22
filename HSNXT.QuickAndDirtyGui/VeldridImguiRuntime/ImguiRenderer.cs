@@ -233,7 +233,7 @@ namespace ImGuiNET
             var io = ImGui.GetIO();
             // Build
             io.Fonts.GetTexDataAsRGBA32(out IntPtr pixels, out var width, out var height, out var bytesPerPixel);
-            Console.WriteLine($"Got ImGui font texture data: {pixels} px {width}x{height} {bytesPerPixel*8}bpp");
+            Console.WriteLine($"Got ImGui font texture data: 0x{(ulong)pixels:x} {width}x{height} {bytesPerPixel*8}bpp");
             // Store our identifier
             io.Fonts.SetTexID(_fontAtlasId);
 

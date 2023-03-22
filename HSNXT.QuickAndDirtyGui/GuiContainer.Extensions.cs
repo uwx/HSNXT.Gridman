@@ -8,6 +8,7 @@ namespace HSNXT.QuickAndDirtyGui
     public sealed partial class GuiContainer
     {
         private Stack<HorizontalLayout> _layouts = new Stack<HorizontalLayout>();
+        private int _globallyIncrementingId;
 
         public bool Button(string label, bool disabled)
         {
@@ -40,12 +41,22 @@ namespace HSNXT.QuickAndDirtyGui
         // this is due to legacy reason and inconsistent with most BeginXXX functions apart from the regular Begin()
         // which behaves like BeginChild().]
 
+        /// <summary>
+        /// Begins a layout in which child elements are all present on the same line and determine their width based on
+        /// a percentage of the available space in the parent element (or in <paramref name="bounds"/> if specified) 
+        /// </summary>
+        /// <param name="inSubPanel">
+        /// If <c>true</c>, creates a child panel to place subsequent elements in. The panel is closed when the layout
+        /// ends.
+        /// </param>
+        /// <param name="bounds"></param>
+        /// <returns></returns>
         public bool BeginHorizontalLayout(bool inSubPanel = false, Vector2? bounds = null)
         {
             _layouts.Push(new HorizontalLayout(inSubPanel, bounds ?? GetContentRegionAvail()));
             if (inSubPanel)
             {
-                return BeginChild($"~HorL{_layouts.Count}", bounds ?? default);
+                return BeginChild($"~HorL{_globallyIncrementingId++}", bounds ?? default);
             }
 
             return true;

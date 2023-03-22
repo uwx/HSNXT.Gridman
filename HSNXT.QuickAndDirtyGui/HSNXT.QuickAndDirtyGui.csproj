@@ -59,6 +59,23 @@
         </EmbeddedResource>
 
         <None Remove="LICENSES.txt" />
+
+        <None Remove="Fonts\Arimo-Regular-NerdFont-WindowsCompat.ttf" />
+
+        <EmbeddedResource Include="Fonts\Arimo-Regular-NerdFont-WindowsCompat.ttf" />
+
+        <None Update="GuiContainer.Elements.Generated.tt">
+          <Generator>TextTemplatingFileGenerator</Generator>
+          <LastGenOutput>GuiContainer.Elements.Generated.cs</LastGenOutput>
+        </None>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Update="GuiContainer.Elements.Generated.cs">
+        <AutoGen>True</AutoGen>
+        <DesignTime>True</DesignTime>
+        <DependentUpon>GuiContainer.Elements.Generated.tt</DependentUpon>
+      </Compile>
     </ItemGroup>
 
 </Project>

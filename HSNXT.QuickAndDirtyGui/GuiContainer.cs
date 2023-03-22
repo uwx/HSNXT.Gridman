@@ -1,9 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.Numerics;
-using System.Runtime.CompilerServices;
 using ImGuiNET;
 using JetBrains.Annotations;
 using Veldrid;

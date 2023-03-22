@@ -1,0 +1,146 @@
+<#@ template hostspecific="false" language="C#" #>
+<#@ output extension=".cs" #>
+<#@ assembly name="System.Core" #>
+<#@ import namespace="System" #>
+<#@ import namespace="System.Linq" #>
+<#@ import namespace="System.Text" #>
+<#@ import namespace="System.Reflection" #>
+<#
+    (string typeDetail, string endMethodName, bool returnsVoid, (string methodName, string parameters, string code)[] beginMethods)[] inputData = {
+        ("Window", "", false, new[] {
+                ("Begin", "string name", "ImGui.Begin(name)"),
+                ("Begin", "string name, ref bool pOpen", "ImGui.Begin(name, ref pOpen)"),
+                ("Begin", "string name, ref bool pOpen, ImGuiWindowFlags flags", "ImGui.Begin(name, ref pOpen, flags)"),
+        }), ("Child", "Child", false, new[] {
+                ("BeginChild", "string strId", "ImGui.BeginChild(strId)"),
+                ("BeginChild", "string strId, Vector2 size", "ImGui.BeginChild(strId, size)"),
+                ("BeginChild", "string strId, Vector2 size, bool border", "ImGui.BeginChild(strId, size, border)"),
+                ("BeginChild", "string strId, Vector2 size, bool border, ImGuiWindowFlags flags", "ImGui.BeginChild(strId, size, border, flags)"),
+                ("BeginChild", "uint id", "ImGui.BeginChild(id)"),
+                ("BeginChild", "uint id, Vector2 size", "ImGui.BeginChild(id, size)"),
+                ("BeginChild", "uint id, Vector2 size, bool border", "ImGui.BeginChild(id, size, border)"),
+                ("BeginChild", "uint id, Vector2 size, bool border, ImGuiWindowFlags flags", "ImGui.BeginChild(id, size, border, flags)"),
+        }), ("ChildFrame", "ChildFrame", false, new[] {
+                ("BeginChildFrame", "uint id, Vector2 size", "ImGui.BeginChildFrame(id, size)"),
+                ("BeginChildFrame", "uint id, Vector2 size, ImGuiWindowFlags flags", "ImGui.BeginChildFrame(id, size, flags)"),
+        }), ("ComboSelector", "Combo", false, new[] {
+                ("BeginCombo", "string label, string previewValue", "ImGui.BeginCombo(label, previewValue)"),
+                ("BeginCombo", "string label, string previewValue, ImGuiComboFlags flags", "ImGui.BeginCombo(label, previewValue, flags)"),
+        }), ("DragDropSource", "DragDropSource", false, new[] {
+                ("BeginDragDropSource", "", "ImGui.BeginDragDropSource()"),
+                ("BeginDragDropSource", "ImGuiDragDropFlags flags", "ImGui.BeginDragDropSource(flags)"),
+        }), ("DragDropTarget", "DragDropTarget", false, new[] {
+                ("BeginDragDropTarget", "", "ImGui.BeginDragDropTarget()"),
+        }), ("Group", "Group", true, new[] {
+                ("BeginGroup", "", "ImGui.BeginGroup()"),
+        }), ("MainMenuBar", "MainMenuBar", false, new[] {
+                ("BeginMainMenuBar", "", "ImGui.BeginMainMenuBar()"),
+        }), ("Menu", "Menu", false, new[] {
+                ("BeginMenu", "string label", "ImGui.BeginMenu(label)"),
+                ("BeginMenu", "string label, bool enabled", "ImGui.BeginMenu(label, enabled)"),
+        }), ("MenuBar", "MenuBar", false, new[] {
+                ("BeginMenuBar", "", "ImGui.BeginMenuBar()"),
+        }), ("Popup", "Popup", false, new[] {
+                ("BeginPopup", "string strId", "ImGui.BeginPopup(strId)"),
+                ("BeginPopup", "string strId, ImGuiWindowFlags flags", "ImGui.BeginPopup(strId, flags)"),
+        }), ("PopupContextItem", "Popup", false, new[] {
+                ("BeginPopupContextItem", "", "ImGui.BeginPopupContextItem()"),
+                ("BeginPopupContextItem", "string strId", "ImGui.BeginPopupContextItem(strId)"),
+                ("BeginPopupContextItem", "string strId, int mouseButton", "ImGui.BeginPopupContextItem(strId, mouseButton)"),
+        }), ("PopupContextVoid", "Popup", false, new[] {
+                ("BeginPopupContextVoid", "", "ImGui.BeginPopupContextVoid()"),
+                ("BeginPopupContextVoid", "string strId", "ImGui.BeginPopupContextVoid(strId)"),
+                ("BeginPopupContextVoid", "string strId, int mouseButton", "ImGui.BeginPopupContextVoid(strId, mouseButton)"),
+        }), ("PopupContextWindow", "Popup", false, new[] {
+                ("BeginPopupContextWindow", "", "ImGui.BeginPopupContextWindow()"),
+                ("BeginPopupContextWindow", "string strId", "ImGui.BeginPopupContextWindow(strId)"),
+                ("BeginPopupContextWindow", "string strId, int mouseButton", "ImGui.BeginPopupContextWindow(strId, mouseButton)"),
+                ("BeginPopupContextWindow", "string strId, int mouseButton, bool alsoOverItems", "ImGui.BeginPopupContextWindow(strId, mouseButton, alsoOverItems)"),
+        }), ("PopupModal", "Popup", false, new[] {
+                ("BeginPopupModal", "string name", "ImGui.BeginPopupModal(name)"),
+                ("BeginPopupModal", "string name, ref bool pOpen", "ImGui.BeginPopupModal(name, ref pOpen)"),
+                ("BeginPopupModal", "string name, ref bool pOpen, ImGuiWindowFlags flags", "ImGui.BeginPopupModal(name, ref pOpen, flags)"),
+        }), ("TabBar", "TabBar", false, new[] {
+                ("BeginTabBar", "string strId", "ImGui.BeginTabBar(strId)"),
+                ("BeginTabBar", "string strId, ImGuiTabBarFlags flags", "ImGui.BeginTabBar(strId, flags)"),
+        }), ("TabItem", "TabItem", false, new[] {
+                ("BeginTabItem", "string label", "ImGui.BeginTabItem(label)"),
+                ("BeginTabItem", "string label, ref bool pOpen", "ImGui.BeginTabItem(label, ref pOpen)"),
+                ("BeginTabItem", "string label, ref bool pOpen, ImGuiTabItemFlags flags", "ImGui.BeginTabItem(label, ref pOpen, flags)"),
+        }), ("Tooltip", "Tooltip", true, new[] {
+                ("BeginTooltip", "", "ImGui.BeginTooltip()"),
+        })
+    };
+#>
+using System.Numerics;
+using ImGuiNET;
+
+namespace HSNXT.QuickAndDirtyGui
+{
+    public sealed partial class GuiContainer
+    {
+<#
+    var i = 0;
+    foreach (var (typeDetail, endMethodName, returnsVoid, beginMethods) in inputData)
+    {
+        var typeName = $"{typeDetail}ElementContext";
+        var identity = i++;
+#>
+        private <#=typeName#>? _autogen<#=typeDetail#>;
+        public <#=typeName#> <#=typeDetail#> => _autogen<#=typeDetail#> ??= new <#=typeDetail#>ElementContext();
+
+        public readonly struct <#=typeName#>
+        {
+            private readonly GuiContainer _gui;
+            private const uint Identity = <#=identity#>;
+
+            internal <#=typeName#>(GuiContainer gui)
+            {
+                _gui = gui;
+            }
+
+<#
+        foreach (var (methodName, parameters, code) in beginMethods)
+        {
+            if (returnsVoid)
+            {
+#>
+            // <#=methodName#>(<#=parameters#>) => <#=code#>;
+            public bool Begin(<#=parameters#>) { <#=code#>; return _gui.PushDefine(true, Identity); }
+<#
+            }
+            else
+            {
+#>
+            // <#=methodName#>(<#=parameters#>) => <#=code#>;
+            public bool Begin(<#=parameters#>) => _gui.PushDefine(<#=code#>, Identity);
+<#
+            }
+        }
+#>
+
+            public void End()
+            {
+                if (_gui.PopDefine(Identity))
+                {
+                    _gui.End<#=endMethodName#>();
+                }
+            }
+        }
+<#
+    }
+#>
+
+        private static readonly string[] ElementContextIdentityToName =
+        {
+<#
+    foreach (var (typeDetail, endMethodName, returnsVoid, beginMethods) in inputData)
+    {
+#>
+            "<#=typeDetail#>ElementContext",
+<#
+    }
+#>
+        };
+    }
+}
